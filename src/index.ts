@@ -1,6 +1,6 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
-import { registerAppTool, registerAppResource } from "@modelcontextprotocol/ext-apps/server/index.js";
+import { registerAppTool, registerAppResource } from "@modelcontextprotocol/ext-apps/server";
 import { StickerStorage } from "./storage.js";
 import path from "path";
 import { fileURLToPath } from "url";
@@ -23,11 +23,21 @@ const resourceUri = "ui://sticker-admin/mcp-app.html";
 // Serve the bundled UI HTML
 registerAppResource(
   server,
+  "Sticker Admin UI",
   resourceUri,
+  { description: "Manage stickers via UI" },
   async () => {
     const uiPath = path.join(__dirname, "..", "dist", "mcp-app.html");
     const content = await fs.readFile(uiPath, "utf-8");
-    return content;
+    return {
+      contents: [
+        {
+          uri: resourceUri,
+          mimeType: "text/html",
+          text: content
+        }
+      ]
+    };
   }
 );
 
@@ -65,16 +75,12 @@ registerAppTool(
     title: "Manage Stickers",
     description: "Internal UI to add or delete stickers.",
     inputSchema: {
-      type: "object",
-      properties: {
-        action: { type: "string" },
-        id: { type: "string" },
-        name: { type: "string" },
-        emotions: { type: "array", items: { type: "string" } },
-        base64Data: { type: "string" },
-        mimeType: { type: "string" }
-      },
-      required: ["action"]
+      action: z.string(),
+      id: z.string().optional(),
+      name: z.string().optional(),
+      emotions: z.array(z.string()).optional(),
+      base64Data: z.string().optional(),
+      mimeType: z.string().optional()
     },
     _meta: { ui: { resourceUri } },
   },
