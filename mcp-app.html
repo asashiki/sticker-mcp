@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Sticker Admin</title>
+    <style>
+      :root {
+        --bg-color: #1a1a1a;
+        --surface-color: rgba(255, 255, 255, 0.05);
+        --border-color: rgba(255, 255, 255, 0.1);
+        --text-color: #ffffff;
+        --text-secondary: #aaaaaa;
+        --primary: #3b82f6;
+        --primary-hover: #2563eb;
+        --danger: #ef4444;
+      }
+      body {
+        margin: 0;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+        background-color: var(--bg-color);
+        color: var(--text-color);
+        min-height: 100vh;
+      }
+      .container {
+        max-width: 800px;
+        margin: 0 auto;
+        padding: 2rem;
+      }
+      h1 {
+        margin-top: 0;
+        font-weight: 600;
+        letter-spacing: -0.02em;
+      }
+      .glass-panel {
+        background: var(--surface-color);
+        backdrop-filter: blur(10px);
+        -webkit-backdrop-filter: blur(10px);
+        border: 1px solid var(--border-color);
+        border-radius: 12px;
+        padding: 1.5rem;
+        margin-bottom: 2rem;
+      }
+      .upload-area {
+        border: 2px dashed var(--border-color);
+        border-radius: 8px;
+        padding: 2rem;
+        text-align: center;
+        cursor: pointer;
+        transition: border-color 0.2s;
+        margin-bottom: 1rem;
+      }
+      .upload-area:hover, .upload-area.dragover {
+        border-color: var(--primary);
+      }
+      .form-group {
+        margin-bottom: 1rem;
+      }
+      label {
+        display: block;
+        margin-bottom: 0.5rem;
+        color: var(--text-secondary);
+        font-size: 0.9rem;
+      }
+      input[type="text"] {
+        width: 100%;
+        padding: 0.75rem;
+        background: rgba(0, 0, 0, 0.2);
+        border: 1px solid var(--border-color);
+        border-radius: 6px;
+        color: white;
+        box-sizing: border-box;
+      }
+      input[type="text"]:focus {
+        outline: none;
+        border-color: var(--primary);
+      }
+      button {
+        background: var(--primary);
+        color: white;
+        border: none;
+        padding: 0.75rem 1.5rem;
+        border-radius: 6px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: background 0.2s;
+      }
+      button:hover {
+        background: var(--primary-hover);
+      }
+      button:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+      }
+      .gallery {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+        gap: 1rem;
+      }
+      .sticker-card {
+        background: var(--surface-color);
+        border: 1px solid var(--border-color);
+        border-radius: 8px;
+        overflow: hidden;
+        position: relative;
+      }
+      .sticker-img {
+        width: 100%;
+        aspect-ratio: 1;
+        object-fit: contain;
+        background: rgba(0, 0, 0, 0.2);
+      }
+      .sticker-info {
+        padding: 0.75rem;
+      }
+      .sticker-name {
+        font-weight: 600;
+        font-size: 0.9rem;
+        margin: 0 0 0.25rem 0;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .sticker-tags {
+        font-size: 0.75rem;
+        color: var(--text-secondary);
+      }
+      .delete-btn {
+        position: absolute;
+        top: 0.25rem;
+        right: 0.25rem;
+        background: var(--danger);
+        color: white;
+        border: none;
+        width: 24px;
+        height: 24px;
+        border-radius: 12px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        opacity: 0;
+        transition: opacity 0.2s;
+        padding: 0;
+        font-size: 16px;
+        line-height: 1;
+      }
+      .sticker-card:hover .delete-btn {
+        opacity: 1;
+      }
+      #preview-img {
+        max-width: 100px;
+        max-height: 100px;
+        margin-top: 1rem;
+        display: none;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <h1>Sticker Manager</h1>
+      
+      <div class="glass-panel">
+        <div class="upload-area" id="drop-zone">
+          <p>Drag & Drop an image here or click to select</p>
+          <input type="file" id="file-input" accept="image/*" style="display: none;" />
+          <img id="preview-img" alt="Preview" />
+        </div>
+        
+        <div class="form-group">
+          <label for="sticker-name">Sticker Name</label>
+          <input type="text" id="sticker-name" placeholder="e.g. Happy Dog" />
+        </div>
+        
+        <div class="form-group">
+          <label for="sticker-tags">Emotions / Tags (comma separated)</label>
+          <input type="text" id="sticker-tags" placeholder="e.g. happy, excited, dog" />
+        </div>
+        
+        <button id="add-btn" disabled>Add Sticker</button>
+      </div>
+
+      <h2>Your Stickers</h2>
+      <div class="gallery" id="gallery">
+        <!-- Stickers will be rendered here -->
+      </div>
+    </div>
+
+    <script type="module" src="/src/mcp-app.ts"></script>
+  </body>
+</html>
