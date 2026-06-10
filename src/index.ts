@@ -59,7 +59,7 @@ server.tool("send_sticker",
     
     const filename = path.basename(sticker.filepath);
     // Use the public domain by default, or localhost for local testing
-    const publicUrl = process.env.PUBLIC_URL || "https://mcp.asashiki.com/mcp/sticker";
+    const publicUrl = process.env.PUBLIC_URL || `http://127.0.0.1:${HTTP_PORT}`;
     const imageUrl = `${publicUrl}/images/${filename}`;
     
     // We return a strict instruction to the AI to output the Markdown link.
@@ -178,9 +178,9 @@ registerAppTool(
 );
 
 // Local HTTP server to serve images
-const HTTP_PORT = process.env.HTTP_PORT ? parseInt(process.env.HTTP_PORT) : 34567;
+let HTTP_PORT = process.env.HTTP_PORT ? parseInt(process.env.HTTP_PORT) : 0;
 async function startHttpServer() {
-  return new Promise<void>((resolve) => {
+  return new Promise<void>((resolve, reject) => {
     const httpServer = http.createServer(async (req, res) => {
       // Handle CORS
       res.setHeader('Access-Control-Allow-Origin', '*');
@@ -208,7 +208,21 @@ async function startHttpServer() {
       }
     });
     
+    httpServer.on('error', (err: any) => {
+      console.error('HTTP Server error:', err);
+      if (err.code === 'EADDRINUSE') {
+        // If it's in use (which shouldn't happen with port 0, but just in case)
+        resolve();
+      } else {
+        reject(err);
+      }
+    });
+
     httpServer.listen(HTTP_PORT, '127.0.0.1', () => {
+      const addr = httpServer.address();
+      if (addr && typeof addr === 'object') {
+        HTTP_PORT = addr.port;
+      }
       console.error(`HTTP static server listening on port ${HTTP_PORT}`);
       resolve();
     });
