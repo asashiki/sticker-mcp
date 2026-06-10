@@ -69,7 +69,7 @@ registerAppResource(
   { description: "View sticker inline" },
   async () => {
     return {
-      contents: [{ uri: inlineUiUri, mimeType: "text/html", text: INLINE_UI_HTML }]
+      contents: [{ uri: inlineUiUri, mimeType: "text/html;profile=mcp-app", text: INLINE_UI_HTML }]
     };
   }
 );
