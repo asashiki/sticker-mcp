@@ -67,6 +67,40 @@ server.tool("send_sticker",
   }
 );
 
+// Regular Tool: Add sticker by local path
+server.tool("add_sticker_by_path",
+  "Add a new sticker from a local file path. Use this when the user asks to add an image as a sticker and provides a file path.",
+  {
+    name: z.string().describe("Name of the sticker"),
+    emotions: z.array(z.string()).describe("List of emotions or tags"),
+    filePath: z.string().describe("Absolute file path to the image on the user's computer")
+  },
+  async ({ name, emotions, filePath }) => {
+    try {
+      // Resolve path
+      const absolutePath = path.resolve(filePath);
+      const data = await fs.readFile(absolutePath);
+      const base64Data = data.toString("base64");
+      
+      // Determine mimetype
+      const ext = path.extname(absolutePath).toLowerCase();
+      const mimeType = ext === ".jpg" || ext === ".jpeg" ? "image/jpeg" :
+                       ext === ".gif" ? "image/gif" : 
+                       ext === ".webp" ? "image/webp" : "image/png";
+
+      const sticker = await storage.addSticker(name, emotions, base64Data, mimeType);
+      return {
+        content: [{ type: "text", text: `Successfully added sticker '${name}' with id ${sticker.id}` }]
+      };
+    } catch (e: any) {
+      return {
+        content: [{ type: "text", text: `Failed to read file or add sticker: ${e.message}` }],
+        isError: true
+      };
+    }
+  }
+);
+
 // We still need the internal tool to interact with the UI, which uses registerAppTool
 registerAppTool(
   server,
