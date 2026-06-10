@@ -6,12 +6,17 @@ import path from "path";
 import { fileURLToPath } from "url";
 import fs from "fs/promises";
 import { z } from "zod";
+import http from "http";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const DATA_DIR = path.join(__dirname, "..", "data");
 
 const storage = new StickerStorage(DATA_DIR);
+
+// We will run a local HTTP server to serve images and bypass the 1MB tool limit
+const HTTP_PORT = 34567;
+const HTTP_URL = `http://127.0.0.1:${HTTP_PORT}`;
 
 const server = new McpServer({
   name: "sticker-mcp",
@@ -54,13 +59,15 @@ server.tool("send_sticker",
         content: [{ type: "text", text: `No sticker found for emotion: ${emotion}` }]
       };
     }
-    const base64 = await storage.getStickerBase64(sticker);
+    
+    // Instead of returning base64 which hits the 1MB limit, 
+    // we return a markdown link pointing to our local HTTP server.
+    const filename = path.basename(sticker.filepath);
     return {
       content: [
         {
-          type: "image",
-          data: base64,
-          mimeType: sticker.mimeType
+          type: "text",
+          text: `![${sticker.name}](${HTTP_URL}/images/${filename})`
         }
       ]
     };
@@ -145,8 +152,46 @@ registerAppTool(
   }
 );
 
+async function startHttpServer() {
+  return new Promise<void>((resolve) => {
+    const httpServer = http.createServer(async (req, res) => {
+      if (req.url?.startsWith('/images/')) {
+        const filename = req.url.replace('/images/', '');
+        // Prevent path traversal
+        const safePath = path.normalize(filename).replace(/^(\.\.(\/|\\|$))+/, '');
+        const filepath = path.join(DATA_DIR, 'images', safePath);
+        
+        try {
+          const data = await fs.readFile(filepath);
+          const ext = path.extname(filepath).toLowerCase();
+          const mimeType = ext === '.png' ? 'image/png' :
+                           ext === '.jpg' || ext === '.jpeg' ? 'image/jpeg' :
+                           ext === '.gif' ? 'image/gif' : 'application/octet-stream';
+          res.writeHead(200, { 
+            'Content-Type': mimeType,
+            'Access-Control-Allow-Origin': '*'
+          });
+          res.end(data);
+        } catch (e) {
+          res.writeHead(404);
+          res.end('Not found');
+        }
+      } else {
+        res.writeHead(404);
+        res.end('Not found');
+      }
+    });
+    
+    httpServer.listen(HTTP_PORT, '127.0.0.1', () => {
+      console.error(`HTTP server listening on ${HTTP_URL}`);
+      resolve();
+    });
+  });
+}
+
 async function main() {
   await storage.init();
+  await startHttpServer();
   const transport = new StdioServerTransport();
   await server.connect(transport);
   console.error("Sticker MCP server running on stdio");
