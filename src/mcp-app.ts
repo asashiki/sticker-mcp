@@ -23,6 +23,58 @@ async function main() {
   const nameInput = document.getElementById("sticker-name") as HTMLInputElement;
   const tagsInput = document.getElementById("sticker-tags") as HTMLInputElement;
   const gallery = document.getElementById("gallery") as HTMLDivElement;
+  
+  const adminView = document.getElementById("admin-view") as HTMLDivElement;
+  const displayView = document.getElementById("display-view") as HTMLDivElement;
+  const displayImg = document.getElementById("display-img") as HTMLImageElement;
+  const displayError = document.getElementById("display-error") as HTMLHeadingElement;
+
+  // UI routing based on host context
+  function checkRoute() {
+    const context = app.getHostContext();
+    const toolName = context?.toolInfo?.tool?.name;
+    
+    if (toolName === "send_sticker") {
+      adminView.style.display = "none";
+      displayView.style.display = "flex";
+      // We will listen to ontoolinput to get the actual arguments
+    } else {
+      adminView.style.display = "block";
+      displayView.style.display = "none";
+      loadStickers();
+    }
+  }
+  
+  app.ontoolinput = async (params) => {
+    const context = app.getHostContext();
+    if (context?.toolInfo?.tool?.name === "send_sticker") {
+      const emotion = params.arguments?.emotion as string;
+      if (emotion) {
+        try {
+          const result = await app.callTool({
+            name: "_admin_manage_stickers",
+            arguments: { action: "get_by_emotion", emotion }
+          });
+          const content = result.content[0] as { text: string };
+          const stickerData = JSON.parse(content.text);
+          if (stickerData && stickerData.base64Data) {
+            displayImg.src = `data:${stickerData.mimeType};base64,${stickerData.base64Data}`;
+            displayImg.style.display = "block";
+            displayError.style.display = "none";
+          } else {
+            displayImg.style.display = "none";
+            displayError.style.display = "block";
+            displayError.textContent = `No sticker found for: ${emotion}`;
+          }
+        } catch (e) {
+          console.error("Failed to load sticker", e);
+        }
+      }
+    }
+  };
+
+  // Check initial route
+  checkRoute();
 
   let currentFileBase64 = "";
   let currentMimeType = "";
@@ -173,8 +225,7 @@ async function main() {
     }
   });
 
-  // Initial load
-  loadStickers();
+  // The initial loadStickers() is handled in checkRoute() now
 }
 
 main();

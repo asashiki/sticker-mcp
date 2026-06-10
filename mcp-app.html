@@ -157,7 +157,7 @@
     </style>
   </head>
   <body>
-    <div class="container">
+    <div id="admin-view" class="container">
       <h1>Sticker Manager</h1>
       
       <div class="glass-panel">
@@ -184,6 +184,11 @@
       <div class="gallery" id="gallery">
         <!-- Stickers will be rendered here -->
       </div>
+    </div>
+
+    <div id="display-view" style="display: none; height: 100vh; display: flex; align-items: center; justify-content: center; background: transparent;">
+      <img id="display-img" style="max-width: 90vw; max-height: 90vh; border-radius: 12px; box-shadow: 0 10px 30px rgba(0,0,0,0.5);" />
+      <h2 id="display-error" style="display: none; color: white;">Sticker not found</h2>
     </div>
 
     <script type="module" src="/src/mcp-app.ts"></script>

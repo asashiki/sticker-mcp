@@ -42,47 +42,26 @@ registerAppResource(
   }
 );
 
-// Register Tool: send_sticker
-server.tool("send_sticker",
-  "Send a sticker to express emotion. E.g. 'happy', 'sad'.",
+// Convert send_sticker to an App Tool so it opens the UI!
+registerAppTool(
+  server,
+  "send_sticker",
   {
-    emotion: z.string().describe("The emotion or scene tag")
+    title: "View Sticker",
+    description: "Send a sticker to express emotion. E.g. 'happy', 'sad'.",
+    inputSchema: {
+      emotion: z.string().describe("The emotion or scene tag")
+    },
+    _meta: { ui: { resourceUri } },
   },
   async ({ emotion }) => {
-    const sticker = await storage.getStickerByEmotion(emotion);
-    if (!sticker) {
-      return {
-        content: [{ type: "text", text: `No sticker found for emotion: ${emotion}` }]
-      };
-    }
-    
-    // Read the file and compress if necessary to avoid 1MB limit
-    let buffer = await fs.readFile(sticker.filepath);
-    let mimeType = sticker.mimeType;
-    
-    // 700KB limit for raw buffer to ensure base64 is under 1MB
-    const SIZE_LIMIT = 700 * 1024;
-    
-    if (buffer.length > SIZE_LIMIT) {
-      try {
-        const isGif = mimeType === 'image/gif';
-        buffer = await sharp(buffer, { animated: isGif })
-          .resize({ width: 512, height: 512, fit: 'inside', withoutEnlargement: true })
-          .webp({ quality: 75 })
-          .toBuffer();
-        mimeType = 'image/webp';
-      } catch (e) {
-        console.error("Compression failed", e);
-        // If compression fails, we just try to return it anyway or return an error
-      }
-    }
-    
+    // We don't return the base64 to the AI anymore! We just tell the AI it worked.
+    // The UI will intercept the tool call and display the sticker to the user!
     return {
       content: [
         {
-          type: "image",
-          data: buffer.toString("base64"),
-          mimeType: mimeType
+          type: "text",
+          text: `[System]: Successfully popped up the sticker UI for emotion '${emotion}'. The user is viewing the sticker now.`
         }
       ]
     };
@@ -161,6 +140,30 @@ registerAppTool(
     if (action === "delete") {
       const success = await storage.deleteSticker(params.id as string);
       return { content: [{ type: "text", text: JSON.stringify({ success }) }] };
+    }
+
+    if (action === "get_by_emotion") {
+      const sticker = await storage.getStickerByEmotion(params.emotion as string);
+      if (!sticker) return { content: [{ type: "text", text: "{}" }] };
+      
+      let buffer = await fs.readFile(sticker.filepath);
+      let mimeType = sticker.mimeType;
+      
+      const SIZE_LIMIT = 700 * 1024;
+      if (buffer.length > SIZE_LIMIT) {
+        try {
+          const isGif = mimeType === 'image/gif';
+          buffer = await sharp(buffer, { animated: isGif })
+            .resize({ width: 512, height: 512, fit: 'inside', withoutEnlargement: true })
+            .webp({ quality: 75 })
+            .toBuffer();
+          mimeType = 'image/webp';
+        } catch (e) {
+          console.error("Compression failed", e);
+        }
+      }
+
+      return { content: [{ type: "text", text: JSON.stringify({ ...sticker, base64Data: buffer.toString("base64"), mimeType }) }] };
     }
 
     return { content: [{ type: "text", text: "Unknown action" }] };
