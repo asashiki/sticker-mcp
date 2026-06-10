@@ -37,6 +37,8 @@ async function main() {
     if (toolName === "send_sticker") {
       adminView.style.display = "none";
       displayView.style.display = "flex";
+      document.body.style.background = "transparent";
+      document.body.style.backgroundColor = "transparent";
       // We will listen to ontoolinput to get the actual arguments
     } else {
       adminView.style.display = "block";
@@ -51,7 +53,7 @@ async function main() {
       const emotion = params.arguments?.emotion as string;
       if (emotion) {
         try {
-          const result = await app.callTool({
+          const result = await (app as any).callServerTool({
             name: "_admin_manage_stickers",
             arguments: { action: "get_by_emotion", emotion }
           });
@@ -66,8 +68,11 @@ async function main() {
             displayError.style.display = "block";
             displayError.textContent = `No sticker found for: ${emotion}`;
           }
-        } catch (e) {
+        } catch (e: any) {
           console.error("Failed to load sticker", e);
+          displayImg.style.display = "none";
+          displayError.style.display = "block";
+          displayError.textContent = `Error: ${e.message || "Unknown error"}`;
         }
       }
     }
