@@ -1,14 +1,16 @@
-version: '3.8'
-
 services:
   sticker-mcp:
     build: .
     container_name: sticker-mcp
-    restart: always
+    restart: unless-stopped
+    env_file: .env
     environment:
       - PORT=3000
-      - TRANSPORT=sse
+      - DATA_DIR=/app/data
     ports:
-      - "3000:3000"
+      - "127.0.0.1:3000:3000"
     volumes:
-      - ./data:/app/data
+      - sticker_data:/app/data
+
+volumes:
+  sticker_data:

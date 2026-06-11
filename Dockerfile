@@ -1,29 +1,25 @@
-FROM node:18-alpine
-
+FROM node:22-alpine AS deps
 WORKDIR /app
-
-# Copy package files
 COPY package*.json ./
+RUN npm install --no-audit --no-fund
 
-# Install dependencies
-RUN npm ci
-
-# Copy source
-COPY . .
-
-# Build Vite frontend
+FROM deps AS build
+COPY tsconfig.json ./
+COPY scripts ./scripts
+COPY src ./src
 RUN npm run build
+RUN npm prune --omit=dev
 
-# Create data directory
-RUN mkdir -p /app/data/images
-
-# Expose HTTP port
-EXPOSE 3000
-
-# Environment variables
-ENV PORT=3000
-ENV TRANSPORT=sse
+FROM node:22-alpine AS runtime
+WORKDIR /app
 ENV NODE_ENV=production
-
-# Start server
-CMD ["npx", "tsx", "src/index.ts"]
+ENV PORT=3000
+ENV DATA_DIR=/app/data
+COPY --from=build /app/package*.json ./
+COPY --from=build /app/node_modules ./node_modules
+COPY --from=build /app/dist ./dist
+RUN mkdir -p /app/data/images && chown -R node:node /app
+USER node
+EXPOSE 3000
+VOLUME ["/app/data"]
+CMD ["node", "dist/server.js"]

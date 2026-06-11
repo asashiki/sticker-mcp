@@ -1,0 +1,413 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sticker Library · 表情包管理</title>
+<style>
+/* Asashiki Design tokens · 樱羽 Sakura (inlined subset) */
+:root {
+  --bg:#ffffff; --bg-tint:#fff2f9; --bg-tint-2:#e9e9fe;
+  --surface:#ffffff; --surface-raised:#fffafd;
+  --border:#f3dce9; --border-strong:#e9c4d9;
+  --text:#3a3340; --text-2:#8a7d8f; --text-3:#b8aabb;
+  --accent:#e96ba8; --accent-soft:#fdd9ec;
+  --accent-2:#8b8bef; --accent-2-soft:#e1e1fe; --on-accent:#ffffff;
+  --shadow:0 1px 2px rgba(180,120,160,.06),0 4px 16px rgba(180,120,160,.08);
+  --radius-s:7px; --radius-m:10px; --radius-l:14px; --skew:-12deg;
+  --font:system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue","PingFang SC","Hiragino Sans","Microsoft YaHei UI","Noto Sans SC",sans-serif;
+  --mono:ui-monospace,"SF Mono","Cascadia Code","JetBrains Mono",Consolas,monospace;
+  --ease:.2s ease;
+}
+[data-theme="dark"] {
+  --bg:#16131c; --bg-tint:#372240; --bg-tint-2:#282b58;
+  --surface:#201b2a; --surface-raised:#2c2439;
+  --border:#3e3149; --border-strong:#564662;
+  --text:#f1eaf4; --text-2:#b3a2ba; --text-3:#7d6e86;
+  --accent:#f48fc4; --accent-soft:#4f2745;
+  --accent-2:#a9a9fa; --accent-2-soft:#30305f; --on-accent:#2a1320;
+  --shadow:0 1px 2px rgba(0,0,0,.3),0 6px 20px rgba(0,0,0,.35);
+}
+* { margin:0; padding:0; box-sizing:border-box; }
+body { font-family:var(--font); background:var(--bg); color:var(--text);
+       transition:background .35s ease,color .35s ease; line-height:1.6;
+       -webkit-font-smoothing:antialiased; }
+.page { max-width:980px; margin:0 auto; padding:0 24px 64px; }
+
+.topbar { position:sticky; top:0; z-index:50; backdrop-filter:blur(14px);
+          background:color-mix(in srgb,var(--bg) 78%,transparent);
+          border-bottom:1px solid var(--border); }
+.topbar-inner { max-width:980px; margin:0 auto; padding:13px 24px;
+                display:flex; align-items:center; gap:14px; }
+.logo { display:flex; align-items:center; gap:10px; font-weight:700; font-size:15px; }
+.logo-mark { width:20px; height:20px; border-radius:6px;
+             background:linear-gradient(135deg,var(--accent),var(--accent-2));
+             transform:skewX(var(--skew)); }
+.logo small { font-weight:400; color:var(--text-3); margin-left:2px; }
+.spacer { flex:1; }
+.count { font-family:var(--mono); font-size:12px; color:var(--text-3); }
+.seg { display:inline-flex; background:var(--bg-tint); border:1px solid var(--border);
+       border-radius:var(--radius-m); padding:3px; gap:2px; }
+.seg button { font-family:var(--font); font-size:13px; border:none; background:transparent;
+              color:var(--text-2); padding:5px 12px; border-radius:calc(var(--radius-m) - 4px);
+              cursor:pointer; transition:all var(--ease); }
+.seg button.on { background:var(--surface); color:var(--text); box-shadow:var(--shadow); font-weight:600; }
+
+.sec-head { display:flex; align-items:baseline; gap:13px; margin:34px 0 16px; }
+.sec-head .eyebrow { width:10px; height:18px; background:var(--accent-soft);
+                     border-radius:3px; transform:skewX(var(--skew)); align-self:center; }
+.sec-head h2 { font-size:19px; font-weight:700; }
+.sec-head .jp { font-size:12px; color:var(--text-3); letter-spacing:.08em; }
+
+.panel { background:var(--surface); border:1px solid var(--border);
+         border-radius:var(--radius-l); padding:20px; box-shadow:var(--shadow); }
+
+.drop { border:1.5px dashed var(--border-strong); border-radius:var(--radius-m);
+        padding:26px 18px; text-align:center; color:var(--text-2); cursor:pointer;
+        transition:all var(--ease); font-size:14px; }
+.drop em { font-style:normal; color:var(--accent); font-weight:600; }
+.drop.dragover { border-color:var(--accent); background:var(--bg-tint); }
+.drop input { display:none; }
+.hint { font-size:12px; color:var(--text-3); margin-top:6px; }
+
+.queue { display:grid; gap:12px; margin-top:16px; }
+.qitem { display:flex; gap:14px; align-items:center; background:var(--bg-tint);
+         border:1px solid var(--border); border-radius:var(--radius-m); padding:10px 12px; }
+.qitem img { width:56px; height:56px; object-fit:contain; border-radius:var(--radius-s);
+             background:var(--surface); }
+.qitem .fields { flex:1; display:grid; gap:7px; }
+.qitem input[type=text] { width:100%; font-family:var(--font); font-size:13.5px;
+        padding:7px 10px; background:var(--surface); color:var(--text);
+        border:1px solid var(--border); border-radius:var(--radius-s); outline:none;
+        transition:border-color var(--ease); }
+.qitem input[type=text]:focus { border-color:var(--accent); }
+.qitem .rm { border:none; background:transparent; color:var(--text-3); cursor:pointer;
+             font-size:17px; padding:6px; border-radius:var(--radius-s); }
+.qitem .rm:hover { color:var(--accent); background:var(--surface); }
+
+.btn { font-family:var(--font); font-size:13.5px; font-weight:600;
+       border-radius:var(--radius-m); padding:9px 18px; cursor:pointer;
+       border:1px solid var(--border-strong); background:transparent; color:var(--text-2);
+       transition:all .18s ease; }
+.btn:hover { background:var(--bg-tint); color:var(--text); }
+.btn.primary { background:var(--accent); border-color:transparent; color:var(--on-accent); }
+.btn.primary:hover { filter:brightness(1.07); box-shadow:var(--shadow); }
+.btn:disabled { opacity:.45; cursor:not-allowed; }
+.actions { display:flex; justify-content:flex-end; gap:10px; margin-top:14px; }
+
+.toolbar { display:flex; gap:10px; align-items:center; margin-bottom:14px; }
+.search { flex:1; max-width:280px; font-family:var(--font); font-size:13.5px;
+          padding:8px 12px; background:var(--bg-tint); color:var(--text);
+          border:1px solid var(--border); border-radius:var(--radius-m); outline:none; }
+.search:focus { border-color:var(--accent); background:var(--surface); }
+
+.gallery { display:grid; grid-template-columns:repeat(auto-fill,minmax(150px,1fr)); gap:14px; }
+.card { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius-l);
+        overflow:hidden; position:relative; transition:all var(--ease); }
+.card:hover { border-color:var(--border-strong); box-shadow:var(--shadow); }
+.card .pic { width:100%; aspect-ratio:1; object-fit:contain; background:var(--bg-tint);
+             display:block; }
+.card .info { padding:9px 11px 11px; }
+.card .nm { font-weight:600; font-size:13px; white-space:nowrap; overflow:hidden;
+            text-overflow:ellipsis; }
+.card .tags { display:flex; flex-wrap:wrap; gap:4px; margin-top:5px; }
+.card .tag { font-size:10.5px; background:var(--accent-soft); color:var(--accent);
+             padding:1px 7px; border-radius:var(--radius-s); }
+.card .ops { position:absolute; top:6px; right:6px; display:flex; gap:4px; opacity:0;
+             transition:opacity var(--ease); }
+.card:hover .ops { opacity:1; }
+.card .ops button { width:26px; height:26px; border:none; border-radius:var(--radius-s);
+        background:color-mix(in srgb,var(--surface) 88%,transparent); color:var(--text-2);
+        cursor:pointer; font-size:13px; line-height:1; box-shadow:var(--shadow); }
+.card .ops button:hover { color:var(--accent); }
+.empty { color:var(--text-3); font-size:13.5px; text-align:center; padding:36px 0; }
+
+dialog { border:1px solid var(--border-strong); border-radius:var(--radius-l);
+         background:var(--surface-raised); color:var(--text); padding:22px;
+         box-shadow:var(--shadow); width:min(380px,90vw); }
+dialog::backdrop { background:rgba(0,0,0,.25); backdrop-filter:blur(2px); }
+dialog h3 { font-size:15px; margin-bottom:14px; }
+dialog .fields { display:grid; gap:9px; }
+dialog input[type=text],dialog input[type=password] { width:100%; font-family:var(--font);
+        font-size:13.5px; padding:8px 11px; background:var(--bg-tint); color:var(--text);
+        border:1px solid var(--border); border-radius:var(--radius-s); outline:none; }
+dialog input:focus { border-color:var(--accent); }
+dialog .actions { margin-top:16px; }
+dialog label { font-size:12px; color:var(--text-2); display:block; margin-bottom:3px; }
+
+.toast-zone { position:fixed; top:64px; right:20px; z-index:99; display:flex;
+              flex-direction:column; gap:9px; }
+.toast { background:var(--surface-raised); border:1px solid var(--border-strong);
+         border-radius:var(--radius-l); padding:11px 16px; box-shadow:var(--shadow);
+         font-size:13px; min-width:200px;
+         animation:toastin .32s cubic-bezier(.21,1.02,.73,1) both; }
+.toast.err { border-color:var(--accent); }
+@keyframes toastin { from { transform:translateX(40px); opacity:0; } to { transform:none; opacity:1; } }
+
+.footer { margin-top:52px; text-align:center; color:var(--text-3); font-size:12px; }
+.footer code { font-family:var(--mono); }
+@media (prefers-reduced-motion:reduce) { *,*::before,*::after { animation-duration:.01ms !important; transition-duration:.01ms !important; } }
+</style>
+</head>
+<body>
+
+<div class="topbar"><div class="topbar-inner">
+  <div class="logo"><div class="logo-mark"></div>Sticker Library <small>表情包管理</small></div>
+  <div class="spacer"></div>
+  <span class="count" id="count"></span>
+  <div class="seg" id="segTheme">
+    <button data-v="light" class="on">浅色</button>
+    <button data-v="dark">深色</button>
+  </div>
+</div></div>
+
+<div class="toast-zone" id="toastZone"></div>
+
+<div class="page">
+
+  <div class="sec-head"><div class="eyebrow"></div><h2>添加表情</h2><span class="jp">UPLOAD</span></div>
+  <div class="panel">
+    <label class="drop" id="drop">
+      拖拽 / 粘贴图片到这里，或 <em>点击选择文件</em>
+      <div class="hint">png · jpg · gif · webp · avif，单张 ≤ 8MB，可一次多张</div>
+      <input type="file" id="fileInput" accept="image/*" multiple>
+    </label>
+    <div class="queue" id="queue"></div>
+    <div class="actions">
+      <button class="btn" id="clearBtn" style="display:none">清空</button>
+      <button class="btn primary" id="uploadBtn" style="display:none">全部添加</button>
+    </div>
+  </div>
+
+  <div class="sec-head"><div class="eyebrow"></div><h2>表情库</h2><span class="jp">GALLERY</span></div>
+  <div class="toolbar">
+    <input class="search" id="search" type="text" placeholder="按名称或标签筛选…">
+  </div>
+  <div class="gallery" id="gallery"></div>
+  <div class="empty" id="empty" style="display:none">还没有表情，先在上面加几张吧。</div>
+
+  <div class="footer">sticker-mcp · 此页面直接管理服务器上的表情库 · AI 在对话里通过 <code>send_sticker</code> 发送</div>
+</div>
+
+<dialog id="editDlg">
+  <h3>编辑表情</h3>
+  <div class="fields">
+    <div><label>名称</label><input type="text" id="editName"></div>
+    <div><label>标签（逗号分隔）</label><input type="text" id="editTags"></div>
+  </div>
+  <div class="actions">
+    <button class="btn" id="editCancel">取消</button>
+    <button class="btn primary" id="editSave">保存</button>
+  </div>
+</dialog>
+
+<dialog id="tokenDlg">
+  <h3>需要管理口令</h3>
+  <div class="fields">
+    <div><label>ADMIN_TOKEN</label><input type="password" id="tokenInput" placeholder="服务器 .env 里配置的口令"></div>
+  </div>
+  <div class="actions">
+    <button class="btn primary" id="tokenSave">确定</button>
+  </div>
+</dialog>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const html = document.documentElement;
+
+/* theme */
+const savedTheme = localStorage.getItem("sticker-theme")
+  || (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+html.setAttribute("data-theme", savedTheme);
+$("segTheme").querySelectorAll("button").forEach(b => {
+  b.classList.toggle("on", b.dataset.v === savedTheme);
+  b.addEventListener("click", () => {
+    $("segTheme").querySelectorAll("button").forEach(x => x.classList.remove("on"));
+    b.classList.add("on");
+    html.setAttribute("data-theme", b.dataset.v);
+    localStorage.setItem("sticker-theme", b.dataset.v);
+  });
+});
+
+/* api helpers */
+let token = localStorage.getItem("sticker-admin-token") || "";
+async function api(path, opts = {}) {
+  const headers = Object.assign({ "Content-Type": "application/json" }, opts.headers || {});
+  if (token) headers["Authorization"] = "Bearer " + token;
+  const res = await fetch(path, Object.assign({}, opts, { headers }));
+  if (res.status === 401) {
+    $("tokenDlg").showModal();
+    throw new Error("unauthorized");
+  }
+  if (!res.ok) throw new Error("HTTP " + res.status);
+  return res.json();
+}
+$("tokenSave").addEventListener("click", () => {
+  token = $("tokenInput").value.trim();
+  localStorage.setItem("sticker-admin-token", token);
+  $("tokenDlg").close();
+  loadGallery();
+});
+
+function toast(msg, isErr) {
+  const el = document.createElement("div");
+  el.className = "toast" + (isErr ? " err" : "");
+  el.textContent = msg;
+  $("toastZone").appendChild(el);
+  setTimeout(() => el.remove(), 3000);
+}
+
+/* upload queue */
+let queue = []; // {dataUri, mimeType, name, tags}
+function addFiles(files) {
+  for (const file of files) {
+    if (!file.type.startsWith("image/")) continue;
+    if (file.size > 8 * 1024 * 1024) { toast(file.name + " 超过 8MB", true); continue; }
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      queue.push({
+        dataUri: e.target.result,
+        mimeType: file.type,
+        name: file.name.replace(/\.[^.]+$/, ""),
+        tags: ""
+      });
+      renderQueue();
+    };
+    reader.readAsDataURL(file);
+  }
+}
+function renderQueue() {
+  const q = $("queue");
+  q.innerHTML = "";
+  queue.forEach((item, i) => {
+    const el = document.createElement("div");
+    el.className = "qitem";
+    el.innerHTML = `
+      <img src="${item.dataUri}" alt="">
+      <div class="fields">
+        <input type="text" placeholder="名称，如：猫猫震惊" value="${escapeAttr(item.name)}" data-i="${i}" data-f="name">
+        <input type="text" placeholder="标签（逗号分隔），如：震惊, 吃惊, surprised" value="${escapeAttr(item.tags)}" data-i="${i}" data-f="tags">
+      </div>
+      <button class="rm" title="移除" data-i="${i}">×</button>`;
+    q.appendChild(el);
+  });
+  q.querySelectorAll("input").forEach(inp => inp.addEventListener("input", () => {
+    queue[+inp.dataset.i][inp.dataset.f] = inp.value;
+  }));
+  q.querySelectorAll(".rm").forEach(btn => btn.addEventListener("click", () => {
+    queue.splice(+btn.dataset.i, 1);
+    renderQueue();
+  }));
+  const show = queue.length > 0;
+  $("uploadBtn").style.display = show ? "" : "none";
+  $("clearBtn").style.display = show ? "" : "none";
+}
+function escapeAttr(s) { return String(s).replace(/&/g,"&amp;").replace(/"/g,"&quot;").replace(/</g,"&lt;"); }
+
+const drop = $("drop");
+drop.addEventListener("dragover", e => { e.preventDefault(); drop.classList.add("dragover"); });
+drop.addEventListener("dragleave", () => drop.classList.remove("dragover"));
+drop.addEventListener("drop", e => {
+  e.preventDefault(); drop.classList.remove("dragover");
+  if (e.dataTransfer && e.dataTransfer.files) addFiles(e.dataTransfer.files);
+});
+$("fileInput").addEventListener("change", e => { addFiles(e.target.files); e.target.value = ""; });
+document.addEventListener("paste", e => {
+  const files = [...(e.clipboardData ? e.clipboardData.files : [])];
+  if (files.length) { addFiles(files); toast("已从剪贴板读取 " + files.length + " 张图片"); }
+});
+
+$("clearBtn").addEventListener("click", () => { queue = []; renderQueue(); });
+$("uploadBtn").addEventListener("click", async () => {
+  const btn = $("uploadBtn");
+  btn.disabled = true; btn.textContent = "添加中…";
+  let ok = 0, fail = 0;
+  for (const item of queue) {
+    const tags = item.tags.split(/[,，]/).map(s => s.trim()).filter(Boolean);
+    if (!item.name.trim() || tags.length === 0) { fail++; continue; }
+    try {
+      await api("api/stickers", {
+        method: "POST",
+        body: JSON.stringify({ name: item.name.trim(), emotions: tags,
+                               base64Data: item.dataUri, mimeType: item.mimeType })
+      });
+      ok++;
+    } catch { fail++; }
+  }
+  btn.disabled = false; btn.textContent = "全部添加";
+  queue = []; renderQueue();
+  toast(`已添加 ${ok} 张` + (fail ? `，${fail} 张失败（需要名称和至少一个标签）` : ""), fail > 0);
+  loadGallery();
+});
+
+/* gallery */
+let stickers = [];
+let editingId = null;
+async function loadGallery() {
+  try {
+    stickers = await api("api/stickers");
+    renderGallery();
+  } catch (e) {
+    if (e.message !== "unauthorized") toast("加载失败：" + e.message, true);
+  }
+}
+function renderGallery() {
+  const kw = $("search").value.trim().toLowerCase();
+  const list = kw
+    ? stickers.filter(s => s.name.toLowerCase().includes(kw)
+        || s.emotions.some(t => t.toLowerCase().includes(kw)))
+    : stickers;
+  const g = $("gallery");
+  g.innerHTML = "";
+  $("count").textContent = stickers.length + " 张";
+  $("empty").style.display = list.length ? "none" : "";
+  list.forEach(s => {
+    const card = document.createElement("div");
+    card.className = "card";
+    const img = s.imageUrl || s.thumb || "";
+    card.innerHTML = `
+      <img class="pic" src="${escapeAttr(img)}" alt="${escapeAttr(s.name)}" loading="lazy">
+      <div class="info">
+        <div class="nm" title="${escapeAttr(s.name)}">${escapeAttr(s.name)}</div>
+        <div class="tags">${s.emotions.map(t => `<span class="tag">${escapeAttr(t)}</span>`).join("")}</div>
+      </div>
+      <div class="ops">
+        <button title="编辑" data-act="edit">✎</button>
+        <button title="删除" data-act="del">×</button>
+      </div>`;
+    card.querySelector('[data-act="edit"]').addEventListener("click", () => {
+      editingId = s.id;
+      $("editName").value = s.name;
+      $("editTags").value = s.emotions.join(", ");
+      $("editDlg").showModal();
+    });
+    card.querySelector('[data-act="del"]').addEventListener("click", async () => {
+      if (!confirm(`删除「${s.name}」？`)) return;
+      try { await api("api/stickers/" + s.id, { method: "DELETE" }); toast("已删除"); loadGallery(); }
+      catch { toast("删除失败", true); }
+    });
+    g.appendChild(card);
+  });
+}
+$("search").addEventListener("input", renderGallery);
+
+$("editCancel").addEventListener("click", () => $("editDlg").close());
+$("editSave").addEventListener("click", async () => {
+  const name = $("editName").value.trim();
+  const tags = $("editTags").value.split(/[,，]/).map(s => s.trim()).filter(Boolean);
+  if (!name || tags.length === 0) { toast("需要名称和至少一个标签", true); return; }
+  try {
+    await api("api/stickers/" + editingId, {
+      method: "PATCH",
+      body: JSON.stringify({ name, emotions: tags })
+    });
+    $("editDlg").close();
+    toast("已保存");
+    loadGallery();
+  } catch { toast("保存失败", true); }
+});
+
+loadGallery();
+</script>
+</body>
+</html>

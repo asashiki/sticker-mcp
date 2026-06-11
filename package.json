@@ -1,34 +1,57 @@
 {
-  "name": "sticker-mcp",
-  "version": "1.0.0",
-  "description": "",
-  "main": "index.js",
-  "scripts": {
-    "build": "vite build",
-    "start": "tsx src/index.ts",
-    "test": "echo \"Error: no test specified\" && exit 1"
+  "name": "@asashiki/sticker-mcp",
+  "version": "1.1.0",
+  "description": "MCP server that lets AI send expressive stickers in chat, with an MCP Apps inline widget and a standalone web admin page.",
+  "private": true,
+  "type": "module",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/asashiki/sticker-mcp.git"
   },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
-  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/asashiki/sticker-mcp/issues"
+  },
+  "homepage": "https://github.com/asashiki/sticker-mcp#readme",
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "mcp-apps",
+    "sticker",
+    "emoji",
+    "meme"
+  ],
+  "bin": {
+    "sticker-mcp": "dist/stdio.js"
+  },
+  "scripts": {
+    "dev": "tsx watch src/server.ts",
+    "dev:stdio": "tsx src/stdio.ts",
+    "build:widget": "node scripts/build-widget.mjs",
+    "build:server": "tsup src/server.ts src/stdio.ts src/index.ts --format esm --platform node --target node20 --out-dir dist --clean",
+    "build:assets": "node scripts/copy-assets.mjs",
+    "build": "npm run build:server && npm run build:widget && npm run build:assets",
+    "start": "node dist/server.js",
+    "start:stdio": "node dist/stdio.js",
+    "typecheck": "tsc --noEmit"
+  },
   "dependencies": {
-    "@modelcontextprotocol/ext-apps": "^1.7.4",
     "@modelcontextprotocol/sdk": "^1.29.0",
-    "@types/cors": "^2.8.19",
-    "@types/express": "^5.0.6",
-    "cors": "^2.8.6",
-    "dotenv": "^17.4.2",
-    "express": "^5.2.1",
-    "mime-types": "^3.0.2",
-    "sharp": "^0.34.5"
+    "cors": "^2.8.5",
+    "express": "^5.1.0",
+    "sharp": "^0.34.5",
+    "zod": "^4.4.3"
   },
   "devDependencies": {
-    "@types/mime-types": "^3.0.1",
-    "@types/node": "^25.9.2",
-    "tsx": "^4.22.4",
-    "typescript": "^6.0.3",
-    "vite": "^8.0.16",
-    "vite-plugin-singlefile": "^2.3.3"
+    "@modelcontextprotocol/ext-apps": "^1.7.4",
+    "@types/cors": "^2.8.19",
+    "@types/express": "^5.0.3",
+    "@types/node": "^24.0.0",
+    "tsup": "^8.5.1",
+    "tsx": "^4.20.3",
+    "typescript": "^6.0.3"
+  },
+  "engines": {
+    "node": ">=20"
   }
 }
