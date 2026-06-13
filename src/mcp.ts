@@ -168,7 +168,8 @@ export function createStickerServer(
           {
             type: "text",
             text: `Sent sticker '${sticker.name}' (tags: ${sticker.emotions.join(", ")}). It is now visible in the chat — no need to describe or re-send it.`
-          }
+          },
+          { type: "text", text: JSON.stringify(payload) }
         ],
         structuredContent: payload as unknown as Record<string, unknown>,
         _meta: { ui: { resourceUri: STICKER_VIEW_URI } }
