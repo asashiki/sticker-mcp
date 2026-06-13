@@ -1,3 +1,19 @@
+<div align="center">
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset=".github/assets/banner-dark.svg">
+  <img alt="sticker-mcp — expressive stickers in AI chat" src=".github/assets/banner-light.svg" width="100%">
+</picture>
+
+[![CI](https://github.com/asashiki/sticker-mcp/actions/workflows/ci.yml/badge.svg)](https://github.com/asashiki/sticker-mcp/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-e96ba8.svg)](LICENSE)
+![Node](https://img.shields.io/badge/node-%E2%89%A5%2020-8b8bef)
+![MCP](https://img.shields.io/badge/MCP-stdio%20%2B%20Streamable%20HTTP-3a3340)
+
+**English** · [简体中文](README.zh-CN.md)
+
+</div>
+
 # sticker-mcp
 
 An MCP server that lets AI send expressive stickers (表情包) directly into the chat, rendered inline via MCP Apps. Comes with a standalone web admin page for managing the sticker library, and tools that let the AI add new stickers for you.
