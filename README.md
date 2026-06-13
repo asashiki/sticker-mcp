@@ -70,7 +70,7 @@ npm run start:stdio
 1. Copy `.env.example` to `.env` and set at least `PUBLIC_BASE_URL` (public HTTPS origin) — the widget loads sticker images from `PUBLIC_BASE_URL/images/*`, and that origin is written into the widget CSP. Without it, images are inlined as base64 (fine locally, brittle in hosted iframes).
 2. `docker compose up -d` (or run `node dist/server.js` behind your reverse proxy).
 3. Reverse-proxy `https://your-domain/mcp/sticker` to the container's `:3000` (same path), plus `/images/*`, `/admin`, `/api/*`.
-4. In claude.ai → Settings → Connectors → add custom connector with URL `https://your-domain/mcp/sticker`. OAuth fields can stay empty.
+4. In claude.ai -> Settings -> Connectors -> add custom connector with URL `https://your-domain/mcp/sticker`. If `MCP_AUTH_PASSWORD` is set, the connector will use OAuth dynamic client registration and show the password authorization page.
 
 > Hosts cache `ui://` resources by URI. If you modify the widget, bump the version suffix in `src/widget/sticker-view-html.ts` (`mcp-app-v2.html` → `v3` ...).
 
@@ -84,8 +84,13 @@ See `.env.example`. Summary:
 | `PORT` | `3000` | HTTP port. |
 | `MCP_HTTP_PATH` | `/mcp/sticker` | Streamable HTTP MCP route. |
 | `ALLOWED_ORIGINS` | PUBLIC_BASE_URL origin | CORS allowlist, comma separated. |
+| `MCP_AUTH_PASSWORD` | _(empty)_ | Optional password gate for remote connectors. Leave empty to disable auth. |
 | `DATA_DIR` | `./data` | stickers.json + images/. |
 | `ADMIN_TOKEN` | _(empty)_ | If set, `/admin` + `/api/*` require it (Bearer header or `?token=`). |
+
+## OAuth password auth
+
+Set `MCP_AUTH_PASSWORD` to enable a minimal OAuth Authorization Code flow for remote connectors. The server exposes OAuth discovery and dynamic client registration, so clients that support automatic registration can connect without a manually configured Client ID. During connection, enter the configured password on the authorization page.
 
 ## Development
 

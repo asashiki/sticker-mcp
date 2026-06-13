@@ -1,15 +1,17 @@
 /**
- * Minimal OAuth 2.0 Authorization Code + PKCE flow for MCP servers.
+ * Minimal OAuth 2.0 Authorization Code flow for MCP servers.
  *
  * If MCP_AUTH_PASSWORD is not set, all requests pass through with no auth.
  *
  * Endpoints added:
- *   GET  /.well-known/oauth-authorization-server  — metadata discovery
- *   GET  /oauth/authorize                          — password input page
- *   POST /oauth/authorize                          — verify password, issue code
- *   POST /oauth/token                              — exchange code for token
+ *   GET  /.well-known/oauth-authorization-server  - metadata discovery
+ *   GET  /.well-known/oauth-protected-resource     - protected resource metadata
+ *   POST /oauth/register                           - dynamic client registration
+ *   GET  /oauth/authorize                          - password input page
+ *   POST /oauth/authorize                          - verify password, issue code
+ *   POST /oauth/token                              - exchange code for token
  *
- * Protected routes check:  Authorization: Bearer <token>
+ * Protected routes check: Authorization: Bearer <token>
  */
 
 import crypto from "node:crypto";
@@ -18,12 +20,44 @@ import type { Request, Response, NextFunction, Express } from "express";
 
 const PASSWORD = process.env.MCP_AUTH_PASSWORD ?? "";
 const ENABLED = PASSWORD.length > 0;
+const ACCESS_TOKEN_TTL_SECONDS = 24 * 60 * 60;
 
 const codes = new Map<string, { token: string; expires: number }>();
-const tokens = new Set<string>();
+const clients = new Map<string, { redirectUris: string[]; clientName?: string; issuedAt: number }>();
 
 function randomHex(bytes = 16) {
   return crypto.randomBytes(bytes).toString("hex");
+}
+
+function serviceSlug(serviceName: string) {
+  return serviceName.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "mcp";
+}
+
+function signPayload(payload: string) {
+  return crypto.createHmac("sha256", PASSWORD).update(payload).digest("base64url");
+}
+
+function issueAccessToken() {
+  const now = Math.floor(Date.now() / 1000);
+  const payload = Buffer.from(JSON.stringify({ iat: now, exp: now + ACCESS_TOKEN_TTL_SECONDS }), "utf8").toString("base64url");
+  return `mcp.${payload}.${signPayload(payload)}`;
+}
+
+function verifyAccessToken(token: string) {
+  const parts = token.split(".");
+  if (parts.length !== 3 || parts[0] !== "mcp") return false;
+  const payloadPart = parts[1];
+  const signaturePart = parts[2];
+  if (!payloadPart || !signaturePart) return false;
+  const expected = Buffer.from(signPayload(payloadPart), "base64url");
+  const actual = Buffer.from(signaturePart, "base64url");
+  if (expected.length !== actual.length || !crypto.timingSafeEqual(expected, actual)) return false;
+  try {
+    const payload = JSON.parse(Buffer.from(payloadPart, "base64url").toString("utf8")) as { exp?: unknown };
+    return typeof payload.exp === "number" && payload.exp > Math.floor(Date.now() / 1000);
+  } catch {
+    return false;
+  }
 }
 
 setInterval(() => {
@@ -35,24 +69,66 @@ setInterval(() => {
 
 const urlencodedParser = express.urlencoded({ extended: false });
 
-export function setupOAuth(app: Express, baseUrl: string, serviceName: string) {
+export function setupOAuth(app: Express, baseUrl: string | null, serviceName: string) {
   if (!ENABLED) {
     return (_req: Request, _res: Response, next: NextFunction) => next();
   }
+  if (!baseUrl) {
+    throw new Error("PUBLIC_BASE_URL is required when MCP_AUTH_PASSWORD is set.");
+  }
 
-  // ── Discovery ──────────────────────────────────────────────────────────────
   app.get("/.well-known/oauth-authorization-server", (_req, res) => {
     res.json({
       issuer: baseUrl,
       authorization_endpoint: `${baseUrl}/oauth/authorize`,
       token_endpoint: `${baseUrl}/oauth/token`,
+      registration_endpoint: `${baseUrl}/oauth/register`,
       response_types_supported: ["code"],
       grant_types_supported: ["authorization_code"],
-      code_challenge_methods_supported: ["S256", "plain"]
+      code_challenge_methods_supported: ["S256", "plain"],
+      token_endpoint_auth_methods_supported: ["none"],
+      scopes_supported: []
     });
   });
 
-  // ── Show password form ─────────────────────────────────────────────────────
+  app.get("/.well-known/oauth-protected-resource", (_req, res) => {
+    res.json({
+      resource: baseUrl,
+      authorization_servers: [baseUrl],
+      bearer_methods_supported: ["header"]
+    });
+  });
+
+  app.post("/oauth/register", express.json({ limit: "256kb" }), (req, res) => {
+    const body = (req.body ?? {}) as { redirect_uris?: unknown; client_name?: unknown };
+    const redirectUris = Array.isArray(body.redirect_uris)
+      ? body.redirect_uris.filter((uri): uri is string => typeof uri === "string" && uri.length > 0)
+      : [];
+    if (redirectUris.length === 0) {
+      res.status(400).json({ error: "invalid_client_metadata", error_description: "redirect_uris is required" });
+      return;
+    }
+
+    const clientId = `${serviceSlug(serviceName)}-${randomHex(16)}`;
+    const issuedAt = Math.floor(Date.now() / 1000);
+    clients.set(clientId, {
+      redirectUris,
+      clientName: typeof body.client_name === "string" ? body.client_name : undefined,
+      issuedAt
+    });
+
+    res.status(201).json({
+      client_id: clientId,
+      client_id_issued_at: issuedAt,
+      client_secret_expires_at: 0,
+      redirect_uris: redirectUris,
+      grant_types: ["authorization_code"],
+      response_types: ["code"],
+      token_endpoint_auth_method: "none",
+      client_name: typeof body.client_name === "string" ? body.client_name : serviceName
+    });
+  });
+
   app.get("/oauth/authorize", (req, res) => {
     const q = req.query as Record<string, string>;
     const hidden = (name: string) =>
@@ -95,7 +171,6 @@ button:hover{filter:brightness(1.07)}
 </body></html>`);
   });
 
-  // ── Verify password, issue code ────────────────────────────────────────────
   app.post("/oauth/authorize", urlencodedParser, (req, res) => {
     const body = req.body as Record<string, string>;
     if (body.password !== PASSWORD) {
@@ -103,10 +178,20 @@ button:hover{filter:brightness(1.07)}
       res.redirect(`/oauth/authorize?${params}`);
       return;
     }
-    const token = randomHex(32);
+    if (!body.redirect_uri) {
+      res.status(400).json({ error: "invalid_request", error_description: "redirect_uri is required" });
+      return;
+    }
+    if (body.client_id) {
+      const client = clients.get(body.client_id);
+      if (client && !client.redirectUris.includes(body.redirect_uri)) {
+        res.status(400).json({ error: "invalid_request", error_description: "redirect_uri is not registered" });
+        return;
+      }
+    }
+
     const code = randomHex(16);
-    codes.set(code, { token, expires: Date.now() + 5 * 60 * 1000 });
-    tokens.add(token);
+    codes.set(code, { token: issueAccessToken(), expires: Date.now() + 5 * 60 * 1000 });
 
     const redirect = new URL(body.redirect_uri);
     redirect.searchParams.set("code", code);
@@ -114,23 +199,26 @@ button:hover{filter:brightness(1.07)}
     res.redirect(redirect.toString());
   });
 
-  // ── Token exchange ─────────────────────────────────────────────────────────
   app.post("/oauth/token", urlencodedParser, express.json(), (req, res) => {
     const code = (req.body as Record<string, string>).code;
-    const entry = code ? codes.get(code) : undefined;
+    if (!code) {
+      res.status(400).json({ error: "invalid_request", error_description: "code is required" });
+      return;
+    }
+    const entry = codes.get(code);
     if (!entry || entry.expires < Date.now()) {
       res.status(400).json({ error: "invalid_grant" });
       return;
     }
     codes.delete(code);
-    res.json({ access_token: entry.token, token_type: "Bearer", expires_in: 86400 });
+    res.json({ access_token: entry.token, token_type: "Bearer", expires_in: ACCESS_TOKEN_TTL_SECONDS });
   });
 
-  // ── Bearer middleware ──────────────────────────────────────────────────────
   return (req: Request, res: Response, next: NextFunction) => {
     const auth = req.headers.authorization ?? "";
     const token = auth.startsWith("Bearer ") ? auth.slice(7) : "";
-    if (tokens.has(token)) return next();
+    if (verifyAccessToken(token)) return next();
+    res.setHeader("WWW-Authenticate", `Bearer resource_metadata="${baseUrl}/.well-known/oauth-protected-resource"`);
     res.status(401).json({ error: "unauthorized" });
   };
 }

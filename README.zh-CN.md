@@ -70,7 +70,7 @@ npm run start:stdio
 1. 复制 `.env.example` 为 `.env`，至少设置 `PUBLIC_BASE_URL`（公网 HTTPS 域名）——widget 从 `PUBLIC_BASE_URL/images/*` 加载表情图，该域名会写进 widget 的 CSP 白名单。不设置时图片会以 base64 内联（本地没问题，托管 iframe 里不稳）。
 2. `docker compose up -d`（或把 `node dist/server.js` 挂在你的反代后面）。
 3. 反向代理 `https://你的域名/mcp/sticker` 到容器 `:3000` 同路径，另外把 `/images/*`、`/admin`、`/api/*` 也一起转发。
-4. claude.ai → 设置 → 连接器 → 添加自定义连接器，URL 填 `https://你的域名/mcp/sticker`，OAuth 两项留空即可。
+4. claude.ai → 设置 → 连接器 → 添加自定义连接器，URL 填 `https://你的域名/mcp/sticker`。如果设置了 `MCP_AUTH_PASSWORD`，连接器会走 OAuth 动态客户端注册，并弹出密码授权页。
 
 > 宿主按 URI 缓存 `ui://` 资源。改过 widget 后记得升级 `src/widget/sticker-view-html.ts` 里的版本号（`mcp-app-v2.html` → `v3` ……），否则客户端拿到的还是旧版。
 
@@ -84,8 +84,13 @@ npm run start:stdio
 | `PORT` | `3000` | HTTP 端口。 |
 | `MCP_HTTP_PATH` | `/mcp/sticker` | Streamable HTTP MCP 路由。 |
 | `ALLOWED_ORIGINS` | PUBLIC_BASE_URL 的 origin | CORS 白名单，逗号分隔。 |
+| `MCP_AUTH_PASSWORD` | _(空)_ | 可选的远程连接器密码门禁。留空则关闭授权。 |
 | `DATA_DIR` | `./data` | stickers.json 和 images/ 的位置。 |
 | `ADMIN_TOKEN` | _(空)_ | 设置后 `/admin` 和 `/api/*` 需要口令（Bearer 头或 `?token=`）。 |
+
+## OAuth 密码授权
+
+设置 `MCP_AUTH_PASSWORD` 后，服务会启用一个最小 OAuth Authorization Code 流程，并暴露 OAuth discovery 与动态客户端注册端点。支持自动注册的客户端不需要手动填写 Client ID；连接时在授权页输入配置的密码即可。
 
 ## 开发
 

@@ -56,6 +56,8 @@ async function main() {
   );
   app.use(express.json({ limit: "12mb" }));
 
+  const bearerAuth = setupOAuth(app, config.publicBaseUrl, "sticker-mcp");
+
   // --- sticker images (referenced by widget structuredContent.imageUrl) ---
   app.get("/images/:filename", async (req, res) => {
     const safe = path.basename(String(req.params.filename));
