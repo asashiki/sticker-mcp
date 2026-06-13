@@ -70,10 +70,11 @@ async function tryMcpApps() {
   try {
     const app = new App({ name: "sticker-mcp", version: "1.1.0" });
     /* Register before connect() — host may send toolresult during/right after handshake */
-    app.ontoolresult = (params: { structuredContent?: unknown }) => {
+    app.addEventListener("toolresult", (params: { structuredContent?: unknown }) => {
+      console.debug("[sticker] ontoolresult:", JSON.stringify(params)?.slice(0, 200));
       const data = coerce(params?.structuredContent);
       if (data) render(data, "claude");
-    };
+    });
     await app.connect();
   } catch (e) {
     console.debug("[sticker] MCP Apps connect skipped:", e);
@@ -84,4 +85,11 @@ function boot() {
   /* Run both bridges in parallel — rendered flag prevents double-render */
   tryChatGpt();
   void tryMcpApps();
-  setTimeout(() => showError("等待表情数据..."), 4000)
+  setTimeout(() => showError("等待表情数据..."), 4000);
+}
+
+if (document.readyState === "loading") {
+  document.addEventListener("DOMContentLoaded", boot);
+} else {
+  boot();
+}
