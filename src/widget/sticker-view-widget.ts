@@ -56,40 +56,32 @@ function showError(msg: string) {
   if (root) root.innerHTML = `<div class="err">${msg}</div>`;
 }
 
-function tryChatGpt(): boolean {
-  if (!window.openai) return false;
+function tryChatGpt() {
+  if (!window.openai) return;
   const apply = () => {
     const data = coerce(window.openai?.toolOutput);
     if (data) render(data, "chatgpt");
   };
   apply();
   window.addEventListener("openai:set_globals", apply as EventListener);
-  return true;
 }
 
 async function tryMcpApps() {
   try {
     const app = new App({ name: "sticker-mcp", version: "1.1.0" });
+    /* Register before connect() — host may send toolresult during/right after handshake */
     app.ontoolresult = (params: { structuredContent?: unknown }) => {
       const data = coerce(params?.structuredContent);
       if (data) render(data, "claude");
     };
     await app.connect();
   } catch (e) {
-    showError("表情组件初始化失败");
-    console.error(e);
+    console.debug("[sticker] MCP Apps connect skipped:", e);
   }
 }
 
 function boot() {
-  if (!tryChatGpt()) {
-    void tryMcpApps();
-  }
-  setTimeout(() => showError("等待表情数据..."), 4000);
-}
-
-if (document.readyState === "loading") {
-  document.addEventListener("DOMContentLoaded", boot);
-} else {
-  boot();
-}
+  /* Run both bridges in parallel — rendered flag prevents double-render */
+  tryChatGpt();
+  void tryMcpApps();
+  setTimeout(() => showError("等待表情数据..."), 4000)

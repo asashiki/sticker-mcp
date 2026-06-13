@@ -3,7 +3,7 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 /** Bump the version suffix whenever the widget changes — hosts cache ui:// resources by URI. */
-export const STICKER_VIEW_URI = "ui://sticker-view/mcp-app-v2.html";
+export const STICKER_VIEW_URI = "ui://sticker-view/mcp-app-v3.html";
 export const STICKER_VIEW_MIME = "text/html;profile=mcp-app";
 
 const CSS = `
