@@ -53,5 +53,9 @@
   },
   "engines": {
     "node": ">=20"
+  },
+  "optionalDependencies": {
+    "@img/sharp-libvips-linuxmusl-x64": "^1.2.4",
+    "@img/sharp-linuxmusl-x64": "^0.34.5"
   }
 }
