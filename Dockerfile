@@ -1,14 +1,14 @@
 FROM node:22-alpine AS deps
 WORKDIR /app
 COPY package*.json ./
-RUN npm install --no-audit --no-fund
+RUN npm install --include=optional --os=linux --libc=musl --cpu=x64 --no-audit --no-fund
 
 FROM deps AS build
 COPY tsconfig.json ./
 COPY scripts ./scripts
 COPY src ./src
 RUN npm run build
-RUN npm prune --omit=dev
+RUN npm prune --omit=dev --include=optional
 
 FROM node:22-alpine AS runtime
 WORKDIR /app
