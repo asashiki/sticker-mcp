@@ -6,6 +6,7 @@ import express from "express";
 import type { Request, Response, NextFunction } from "express";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { loadConfig } from "./config.js";
+import { setupOAuth } from "./oauth.js";
 import { createStickerServer } from "./mcp.js";
 import { StickerStorage } from "./storage.js";
 
@@ -148,7 +149,7 @@ async function main() {
   });
 
   // --- Streamable HTTP MCP endpoint (stateless: fresh server per request) ---
-  app.all(mcpPaths, async (req, res) => {
+  app.all(mcpPaths, bearerAuth, async (req, res) => {
     const origin = req.headers.origin;
     if (origin && config.allowedOrigins.length > 0 && !config.allowedOrigins.includes(origin)) {
       res.status(403).json({ error: "Origin not allowed" });
