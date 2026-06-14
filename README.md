@@ -22,7 +22,7 @@ An MCP server that lets AI send expressive stickers (表情包) directly into th
 
 - **Inline sticker rendering** — `send_sticker` renders the image in the conversation via a `ui://` MCP Apps widget (works on claude.ai and ChatGPT web).
 - **AI judgement built in** — tool descriptions teach the AI to check the library (`list_available_stickers`) and pick a sticker matching the conversation's mood, proactively.
-- **AI can grow the library** — `add_sticker` lets the AI save an image when the host provides an actual image URL or `data:image/...;base64,...` URI, with name + emotion tags. On local stdio there is also `add_sticker_by_path`.
+- **AI can grow the library** — `create_sticker_upload` gives the AI a one-time upload URL on this sticker library for attached image bytes; `add_sticker` still accepts an existing image URL. On local stdio there is also `add_sticker_by_path`.
 - **Standalone admin page** — `/admin` is a plain web page (no MCP host needed): drag & drop / paste upload, batch add, tag editing, search, delete. Optionally protected by `ADMIN_TOKEN`.
 - **Simple storage** — JSON + image files on disk. No database.
 
@@ -32,14 +32,15 @@ An MCP server that lets AI send expressive stickers (表情包) directly into th
 |---|---|
 | `send_sticker` | Pick a sticker by emotion/scene `query` (or exact `stickerId`) and render it in chat. Random pick among multiple matches. On no match, returns the catalog so the AI can retry. |
 | `list_available_stickers` | Catalog of `{id, name, tags}` — the AI calls this once per conversation to know what moods it can express. |
-| `add_sticker` | Download an image from an http(s) URL or save a `data:image/...` URI as a sticker with name + tags. |
+| `add_sticker` | Download an image from an existing http(s) URL or save a small `data:image/...` URI as a sticker with name + tags. |
+| `create_sticker_upload` | Create a 10-minute one-time PUT URL on this sticker library so the AI can upload attached image bytes directly here, without third-party image hosts. |
 | `add_sticker_by_path` | (stdio/local only) Add a sticker from a local file path. |
 
 ## Transports & endpoints
 
 - **Local stdio**: `node dist/stdio.js` (or `npm run dev:stdio`).
 - **Remote Streamable HTTP**: `node dist/server.js`, MCP endpoint at `MCP_HTTP_PATH` (default `/mcp/sticker`, `/mcp` kept as alias).
-- HTTP server also serves: `/images/:filename` (sticker images for the widget), `/admin` (management page), `/api/stickers` (REST for the admin page), `/healthz`.
+- HTTP server also serves: `/images/:filename` (sticker images for the widget), `/admin` (management page), `/api/stickers` (REST for the admin page), `/api/stickers/upload/:token` (one-time direct uploads created by the MCP tool), `/healthz`.
 
 ## Quick start (local)
 

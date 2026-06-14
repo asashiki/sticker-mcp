@@ -22,7 +22,7 @@
 
 - **对话内渲染** — `send_sticker` 调用后，表情图直接出现在聊天气泡里，带轻巧的弹入动画。
 - **AI 自己会判断** — 工具描述教会 AI：先用 `list_available_stickers` 看一眼库里有什么，再根据对话气氛主动挑合适的标签发图（报喜、安慰、打招呼、庆祝……）；匹配不到时会把整个表情目录返回给 AI 让它自己换词重试。
-- **AI 帮你加表情** — 当宿主客户端提供真实图片 URL 或 `data:image/...;base64,...` 时，AI 可以调 `add_sticker` 起好名字、打好情绪标签存进库里。本地 stdio 模式下还有 `add_sticker_by_path` 直接读本地文件。
+- **AI 帮你加表情** — `create_sticker_upload` 会给 AI 一个贴纸库上的一次性上传地址，用来把附件图片 bytes 直接传到你的贴纸库；`add_sticker` 仍支持已有图片 URL。本地 stdio 模式下还有 `add_sticker_by_path` 直接读本地文件。
 - **独立管理页** — `/admin` 是一个纯网页（不依赖任何 MCP 客户端）：拖拽/粘贴批量上传、缩略图预览、改名改标签、搜索、删除，浅色/深色主题切换，可用 `ADMIN_TOKEN` 加口令保护。
 - **存储极简** — JSON + 图片文件落盘，零数据库。
 
@@ -32,14 +32,15 @@
 |---|---|
 | `send_sticker` | 按情绪/场景词 `query`（或精确 `stickerId`）选图并渲染到对话。多个匹配时随机挑一张；匹配不到返回完整目录供 AI 重试。 |
 | `list_available_stickers` | 返回 `{id, name, tags}` 目录，AI 每段对话开头看一次就知道能表达哪些情绪。 |
-| `add_sticker` | 从 http(s) 图片 URL 或 `data:image/...` 保存新表情，带名称和 1-8 个标签。 |
+| `add_sticker` | 从已有 http(s) 图片 URL 或较小的 `data:image/...` 保存新表情，带名称和 1-8 个标签。 |
+| `create_sticker_upload` | 创建一个 10 分钟有效的一次性 PUT 上传 URL，让 AI 把附件图片 bytes 直接上传到这个贴纸库，不再绕第三方图床。 |
 | `add_sticker_by_path` | （仅本地 stdio）从本地文件路径加表情。 |
 
 ## 传输与端点
 
 - **本地 stdio**：`node dist/stdio.js`（开发用 `npm run dev:stdio`）。
 - **远程 Streamable HTTP**：`node dist/server.js`，MCP 端点在 `MCP_HTTP_PATH`（默认 `/mcp/sticker`，同时保留 `/mcp` 别名方便本机测试）。
-- HTTP 服务还提供：`/images/:filename`（widget 加载表情图）、`/admin`（管理页）、`/api/stickers`（管理页 REST 接口）、`/healthz`（健康检查）。
+- HTTP 服务还提供：`/images/:filename`（widget 加载表情图）、`/admin`（管理页）、`/api/stickers`（管理页 REST 接口）、`/api/stickers/upload/:token`（MCP 工具创建的一次性直传地址）、`/healthz`（健康检查）。
 
 ## 快速开始（本地）
 

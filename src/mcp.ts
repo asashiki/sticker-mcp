@@ -6,6 +6,7 @@ import sharp from "sharp";
 import type { AppConfig } from "./config.js";
 import { imageOrigins } from "./config.js";
 import type { Sticker, StickerStorage } from "./storage.js";
+import { createStickerUploadSlot } from "./upload-slots.js";
 import { STICKER_VIEW_MIME, STICKER_VIEW_URI, stickerViewHtml } from "./widget/sticker-view-html.js";
 
 const MAX_DOWNLOAD_BYTES = 8 * 1024 * 1024;
@@ -50,7 +51,7 @@ async function toPayload(
 async function catalogText(storage: StickerStorage): Promise<string> {
   const stickers = await storage.getAllStickers();
   if (stickers.length === 0) {
-    return "Sticker library is empty. You can add stickers with add_sticker if you have an actual http(s) image URL or data:image base64 URI, or the user can open the admin page.";
+    return "Sticker library is empty. Add stickers with add_sticker when you already have an image URL, or create_sticker_upload when you need to upload attached image bytes directly to this sticker library.";
   }
   const catalog = stickers.map((s) => ({ id: s.id, name: s.name, tags: s.emotions }));
   return JSON.stringify(catalog, null, 2);
@@ -123,6 +124,11 @@ function describeImageInput(image: string): string {
 async function addStickerFromImageInput(storage: StickerStorage, name: string, emotions: string[], image: string) {
   const { buffer, mimeType } = await readImageInput(image);
   return storage.addSticker(name, emotions, buffer, mimeType);
+}
+
+function uploadUrl(config: AppConfig, token: string) {
+  const base = config.publicBaseUrl ?? `http://127.0.0.1:${config.port}`;
+  return `${base}/api/stickers/upload/${token}`;
 }
 
 export interface CreateServerOptions {
@@ -248,9 +254,9 @@ export function createStickerServer(
     {
       title: "Add Sticker",
       description:
-        "Add an image to the sticker library. Use this only when you already have an actual public http(s) image URL or exact data:image/...;base64,... URI. " +
-        "If the user attached an image but the host did not expose the original image bytes or a usable URL to you, do not try web search, connector search, artifacts, shell, curl, OCR, or invented base64; tell the user the current client did not make the attachment bytes available to MCP. " +
-        "Ask for or infer a short name plus 1-8 emotion/scene tags. Supported formats: png / jpeg / gif / webp / avif, max 8MB.",
+        "Add an image to the sticker library from an existing public http(s) image URL, or a small exact data:image/...;base64,... URI. " +
+        "If you have the user's attached image bytes/file, or the data URI would be too large for tool arguments, call create_sticker_upload instead and upload directly to this sticker library. Do not use third-party image hosts. " +
+        "If the user already described what the image is, do not spend tokens visually analyzing it; use the user's description to choose the name and tags. If the user did not describe it, inspect the image enough to choose a short name plus 1-8 emotion/scene tags. Supported formats: png / jpeg / gif / webp / avif, max 8MB.",
       inputSchema: {
         name: z.string().min(1).max(60).describe("Short display name, e.g. 'Claude酱点赞'."),
         emotions: z
@@ -287,6 +293,55 @@ export function createStickerServer(
           isError: true
         };
       }
+    }
+  );
+
+  server.registerTool(
+    "create_sticker_upload",
+    {
+      title: "Create Sticker Upload URL",
+      description:
+        "Create a one-time upload URL on this sticker library for the user's attached image bytes/file. Use this when adding a sticker from an attachment, especially when base64 would be too large. " +
+        "After this tool returns, upload the original image bytes directly to uploadUrl with HTTP PUT and Content-Type image/png, image/jpeg, image/gif, image/webp, or image/avif. The sticker is saved as soon as the PUT succeeds; do not call add_sticker afterwards. " +
+        "Do not upload the image to third-party image hosts. Do not curl the MCP endpoint. If the user already told you what the image is, skip visual analysis and use that description for the name and tags. If not, inspect the image enough to name and tag it. The URL expires in 10 minutes.",
+      inputSchema: {
+        name: z.string().min(1).max(60).describe("Short display name, e.g. 'Claude酱点赞'."),
+        emotions: z
+          .array(z.string().min(1).max(30))
+          .min(1)
+          .max(8)
+          .describe("Emotion/scene tags describing when to send it, e.g. ['点赞', '开心', '赞', 'thumbs up'].")
+      },
+      annotations: {
+        readOnlyHint: false,
+        destructiveHint: false,
+        idempotentHint: false,
+        openWorldHint: false
+      }
+    },
+    async ({ name, emotions }) => {
+      const slot = createStickerUploadSlot(name, emotions);
+      const url = uploadUrl(config, slot.token);
+      console.log(`[create_sticker_upload] token=${slot.token} name="${slot.name}" tags=${JSON.stringify(slot.emotions)}`);
+      return {
+        content: [
+          {
+            type: "text",
+            text:
+              `Upload the original image bytes directly to this sticker library with HTTP PUT:\n${url}\n` +
+              `Use Content-Type image/png, image/jpeg, image/gif, image/webp, or image/avif. Max 8MB. ` +
+              `The sticker '${slot.name}' will be saved immediately when the PUT succeeds. Do not use a third-party image host.`
+          }
+        ],
+        structuredContent: {
+          uploadUrl: url,
+          method: "PUT",
+          expiresAt: new Date(slot.expiresAt).toISOString(),
+          maxBytes: MAX_DOWNLOAD_BYTES,
+          name: slot.name,
+          emotions: slot.emotions
+        }
+      };
     }
   );
 

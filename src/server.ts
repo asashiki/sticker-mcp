@@ -9,6 +9,7 @@ import { loadConfig } from "./config.js";
 import { setupOAuth } from "./oauth.js";
 import { createStickerServer } from "./mcp.js";
 import { StickerStorage } from "./storage.js";
+import { consumeStickerUploadSlot, getStickerUploadSlot } from "./upload-slots.js";
 
 const config = loadConfig();
 const storage = new StickerStorage(config.dataDir);
@@ -54,6 +55,34 @@ async function main() {
       }
     })
   );
+
+  app.put(["/api/stickers/upload/:token", "/api/sticker-upload/:token"], express.raw({ type: "*/*", limit: "8mb" }), async (req, res) => {
+    const token = String(req.params.token);
+    const slot = getStickerUploadSlot(token);
+    if (!slot) {
+      res.status(404).json({ error: "Upload URL is invalid or expired" });
+      return;
+    }
+
+    const body = Buffer.isBuffer(req.body) ? req.body : Buffer.alloc(0);
+    const mimeType = (String(req.headers["content-type"] ?? "").split(";")[0] ?? "").trim() || "image/png";
+    try {
+      const sticker = await storage.addSticker(slot.name, slot.emotions, body, mimeType);
+      consumeStickerUploadSlot(token);
+      const imageUrl = `/images/${storage.publicFilename(sticker)}`;
+      console.log(`[sticker_upload] added id=${sticker.id} name="${sticker.name}" bytes=${body.length} mime=${sticker.mimeType}`);
+      res.status(201).json({
+        id: sticker.id,
+        name: sticker.name,
+        emotions: sticker.emotions,
+        imageUrl: config.publicBaseUrl ? `${config.publicBaseUrl}${imageUrl}` : imageUrl
+      });
+    } catch (e) {
+      console.warn(`[sticker_upload] failed token=${token}: ${e instanceof Error ? e.message : String(e)}`);
+      res.status(400).json({ error: e instanceof Error ? e.message : "upload failed" });
+    }
+  });
+
   app.use(express.json({ limit: "12mb" }));
 
   const bearerAuth = setupOAuth(app, config.publicBaseUrl, "sticker-mcp");
