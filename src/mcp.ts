@@ -87,6 +87,10 @@ export function createStickerServer(
 ): McpServer {
   const server = new McpServer({ name: "sticker-mcp", version: "1.1.0" });
   const csp = cspMeta(config);
+  const widgetMeta = {
+    ui: { resourceUri: STICKER_VIEW_URI },
+    "openai/outputTemplate": STICKER_VIEW_URI
+  };
 
   server.registerResource(
     "sticker-view",
@@ -129,10 +133,7 @@ export function createStickerServer(
         idempotentHint: false,
         openWorldHint: false
       },
-      _meta: {
-        ui: { resourceUri: STICKER_VIEW_URI },
-        "openai/outputTemplate": STICKER_VIEW_URI
-      }
+      _meta: widgetMeta
     },
     async ({ query, stickerId }) => {
       let sticker: Sticker | null = null;
@@ -172,7 +173,7 @@ export function createStickerServer(
           { type: "text", text: JSON.stringify(payload) }
         ],
         structuredContent: payload as unknown as Record<string, unknown>,
-        _meta: { ui: { resourceUri: STICKER_VIEW_URI } }
+        _meta: widgetMeta
       };
     }
   );

@@ -100,7 +100,7 @@ async function main() {
         emotions: s.emotions,
         addedAt: s.addedAt ?? null,
         thumb: s.thumb,
-        imageUrl: `images/${storage.publicFilename(s)}`
+        imageUrl: `/images/${storage.publicFilename(s)}`
       }))
     );
   });

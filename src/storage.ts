@@ -20,6 +20,30 @@ export interface StickerWithThumb extends Sticker {
 const THUMB_SIZE = 96;
 /** Stickers larger than this get recompressed before being inlined as base64. */
 const INLINE_SIZE_LIMIT = 700 * 1024;
+const ALLOWED_MIME = ["image/png", "image/jpeg", "image/gif", "image/webp", "image/avif"];
+const MIME_BY_FORMAT: Record<string, string> = {
+  png: "image/png",
+  jpeg: "image/jpeg",
+  jpg: "image/jpeg",
+  gif: "image/gif",
+  webp: "image/webp",
+  avif: "image/avif"
+};
+
+async function validateImage(buffer: Buffer, fallbackMimeType: string): Promise<string> {
+  if (buffer.length === 0) throw new Error("Image is empty.");
+  let detected = fallbackMimeType;
+  try {
+    const meta = await sharp(buffer, { animated: true }).metadata();
+    detected = meta.format ? MIME_BY_FORMAT[meta.format] ?? "" : "";
+  } catch {
+    throw new Error("Invalid image data.");
+  }
+  if (!ALLOWED_MIME.includes(detected)) {
+    throw new Error(`Unsupported image type '${detected || fallbackMimeType}'.`);
+  }
+  return detected;
+}
 
 export class StickerStorage {
   private dataFile: string;
@@ -68,8 +92,9 @@ export class StickerStorage {
   }
 
   async addSticker(name: string, emotions: string[], imageBuffer: Buffer, mimeType: string): Promise<Sticker> {
+    const safeMimeType = await validateImage(imageBuffer, mimeType);
     const id = `${Date.now()}-${crypto.randomBytes(3).toString("hex")}`;
-    const ext = (mimeType.split("/")[1] || "png").replace("+xml", "");
+    const ext = (safeMimeType.split("/")[1] || "png").replace("+xml", "");
     const filename = `${id}.${ext}`;
     const filepath = path.join(this.imageDir, filename);
     await fs.writeFile(filepath, imageBuffer);
@@ -79,7 +104,7 @@ export class StickerStorage {
       name,
       emotions: emotions.map((e) => e.trim()).filter(Boolean),
       filepath,
-      mimeType,
+      mimeType: safeMimeType,
       addedAt: new Date().toISOString()
     };
 
