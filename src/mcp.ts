@@ -274,51 +274,6 @@ export function createStickerServer(
     }
   );
 
-  server.registerTool(
-    "add_sticker_by_url",
-    {
-      title: "Add Sticker From URL",
-      description:
-        "Download an image from an http(s) URL (or accept a data:image base64 URI) and save it as a new sticker. " +
-        "Use add_sticker instead when the user provided an attached image. " +
-        "Ask the user (or infer from the image) a short name plus 1-5 emotion/scene tags describing when to use it. " +
-        "Supported formats: png / jpeg / gif / webp / avif, max 8MB.",
-      inputSchema: {
-        name: z.string().min(1).max(60).describe("Short display name, e.g. '猫猫震惊'."),
-        emotions: z
-          .array(z.string().min(1).max(30))
-          .min(1)
-          .max(8)
-          .describe("Emotion/scene tags describing when to send it, e.g. ['震惊', '吃惊', 'surprised']."),
-        url: z.string().min(8).describe("https:// image URL, or a data:image/...;base64,... URI.")
-      },
-      annotations: {
-        readOnlyHint: false,
-        destructiveHint: false,
-        idempotentHint: false,
-        openWorldHint: true
-      }
-    },
-    async ({ name, emotions, url }) => {
-      try {
-        const sticker = await addStickerFromImageInput(storage, name, emotions, url);
-        return {
-          content: [
-            {
-              type: "text",
-              text: `Added sticker '${sticker.name}' (id ${sticker.id}, tags: ${sticker.emotions.join(", ")}). You can send it right away with send_sticker.`
-            }
-          ]
-        };
-      } catch (e) {
-        return {
-          content: [{ type: "text", text: `Failed to add sticker: ${e instanceof Error ? e.message : String(e)}` }],
-          isError: true
-        };
-      }
-    }
-  );
-
   if (options.allowLocalFileAccess) {
     server.registerTool(
       "add_sticker_by_path",
@@ -360,48 +315,6 @@ export function createStickerServer(
       }
     );
   }
-
-  // Internal tool used by the in-host admin widget (hidden-ish: underscore prefix).
-  server.registerTool(
-    "_admin_manage_stickers",
-    {
-      title: "Sticker Admin (internal)",
-      description: "Internal endpoint for the sticker admin widget. Not intended for direct AI use.",
-      inputSchema: {
-        action: z.enum(["list", "add", "update", "delete"]),
-        id: z.string().optional(),
-        name: z.string().optional(),
-        emotions: z.array(z.string()).optional(),
-        base64Data: z.string().optional(),
-        mimeType: z.string().optional()
-      }
-    },
-    async (params) => {
-      if (params.action === "list") {
-        const stickers = await storage.withThumbs(await storage.getAllStickers());
-        const safe = stickers.map(({ filepath: _fp, ...rest }) => rest);
-        return { content: [{ type: "text", text: JSON.stringify(safe) }] };
-      }
-      if (params.action === "add") {
-        if (!params.name || !params.emotions || !params.base64Data || !params.mimeType) {
-          return { content: [{ type: "text", text: "Missing fields for add." }], isError: true };
-        }
-        const sticker = await storage.addStickerFromBase64(params.name, params.emotions, params.base64Data, params.mimeType);
-        return { content: [{ type: "text", text: JSON.stringify({ id: sticker.id }) }] };
-      }
-      if (params.action === "update") {
-        if (!params.id) return { content: [{ type: "text", text: "Missing id." }], isError: true };
-        const sticker = await storage.updateSticker(params.id, { name: params.name, emotions: params.emotions });
-        return { content: [{ type: "text", text: JSON.stringify({ success: Boolean(sticker) }) }] };
-      }
-      if (params.action === "delete") {
-        if (!params.id) return { content: [{ type: "text", text: "Missing id." }], isError: true };
-        const success = await storage.deleteSticker(params.id);
-        return { content: [{ type: "text", text: JSON.stringify({ success }) }] };
-      }
-      return { content: [{ type: "text", text: "Unknown action" }], isError: true };
-    }
-  );
 
   return server;
 }
