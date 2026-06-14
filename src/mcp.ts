@@ -50,7 +50,7 @@ async function toPayload(
 async function catalogText(storage: StickerStorage): Promise<string> {
   const stickers = await storage.getAllStickers();
   if (stickers.length === 0) {
-    return "Sticker library is empty. You can add stickers with add_sticker_by_url, or the user can open the admin page.";
+    return "Sticker library is empty. You can add stickers with add_sticker if you have an actual http(s) image URL or data:image base64 URI, or the user can open the admin page.";
   }
   const catalog = stickers.map((s) => ({ id: s.id, name: s.name, tags: s.emotions }));
   return JSON.stringify(catalog, null, 2);
@@ -104,6 +104,20 @@ async function readImageInput(image: string): Promise<{ buffer: Buffer; mimeType
   }
   if (buffer.length > MAX_DOWNLOAD_BYTES) throw new Error("Image exceeds the 8MB limit.");
   return { buffer, mimeType };
+}
+
+function describeImageInput(image: string): string {
+  if (image.startsWith("data:image/")) {
+    const match = /^data:(image\/[\w.+-]+);base64,(.+)$/s.exec(image);
+    const byteLength = match?.[2] ? Buffer.byteLength(match[2], "base64") : 0;
+    return `data-uri ${match?.[1] ?? "unknown"} ${byteLength} bytes`;
+  }
+  try {
+    const url = new URL(image);
+    return `${url.protocol}//${url.host}${url.pathname}`;
+  } catch {
+    return "invalid image input";
+  }
 }
 
 async function addStickerFromImageInput(storage: StickerStorage, name: string, emotions: string[], image: string) {
@@ -234,9 +248,8 @@ export function createStickerServer(
     {
       title: "Add Sticker",
       description:
-        "Add the user's provided image to the sticker library. Use this directly when the user asks to add an attached/shared image as a sticker. " +
-        "Pass `image` as either a public http(s) image URL or a data:image/...;base64,... URI built from the provided image bytes. " +
-        "Do not use web search, connector search, artifacts, shell, or curl for this; call this MCP tool directly. " +
+        "Add an image to the sticker library. Use this only when you already have an actual public http(s) image URL or exact data:image/...;base64,... URI. " +
+        "If the user attached an image but the host did not expose the original image bytes or a usable URL to you, do not try web search, connector search, artifacts, shell, curl, OCR, or invented base64; tell the user the current client did not make the attachment bytes available to MCP. " +
         "Ask for or infer a short name plus 1-8 emotion/scene tags. Supported formats: png / jpeg / gif / webp / avif, max 8MB.",
       inputSchema: {
         name: z.string().min(1).max(60).describe("Short display name, e.g. 'Claude酱点赞'."),
@@ -255,8 +268,10 @@ export function createStickerServer(
       }
     },
     async ({ name, emotions, image }) => {
+      console.log(`[add_sticker] requested name="${name}" tags=${JSON.stringify(emotions)} image=${describeImageInput(image)}`);
       try {
         const sticker = await addStickerFromImageInput(storage, name, emotions, image);
+        console.log(`[add_sticker] added id=${sticker.id} name="${sticker.name}" mime=${sticker.mimeType}`);
         return {
           content: [
             {
@@ -266,6 +281,7 @@ export function createStickerServer(
           ]
         };
       } catch (e) {
+        console.warn(`[add_sticker] failed name="${name}": ${e instanceof Error ? e.message : String(e)}`);
         return {
           content: [{ type: "text", text: `Failed to add sticker: ${e instanceof Error ? e.message : String(e)}` }],
           isError: true
