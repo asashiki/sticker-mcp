@@ -11,11 +11,29 @@ import { STICKER_VIEW_MIME, STICKER_VIEW_URI, stickerViewHtml } from "./widget/s
 
 const MAX_DOWNLOAD_BYTES = 8 * 1024 * 1024;
 const ALLOWED_MIME = ["image/png", "image/jpeg", "image/gif", "image/webp", "image/avif"];
+const WIDGET_DOMAIN = "https://sticker-mcp.asashiki.com";
+const stickerPayloadSchema = {
+  id: z.string(),
+  name: z.string(),
+  emotions: z.array(z.string()),
+  imageUrl: z.string(),
+  mimeType: z.string(),
+  matchedQuery: z.string()
+};
+const stickerUploadSchema = {
+  uploadUrl: z.string(),
+  method: z.literal("PUT"),
+  expiresAt: z.string(),
+  maxBytes: z.number(),
+  name: z.string(),
+  emotions: z.array(z.string())
+};
 
 function cspMeta(config: AppConfig) {
   const origins = imageOrigins(config);
   return {
-    ui: { csp: { resourceDomains: origins, connectDomains: origins } },
+    ui: { domain: WIDGET_DOMAIN, csp: { resourceDomains: origins, connectDomains: origins } },
+    "openai/widgetDomain": WIDGET_DOMAIN,
     "openai/widgetCSP": { resource_domains: origins, connect_domains: origins }
   };
 }
@@ -180,6 +198,7 @@ export function createStickerServer(
           .describe("Emotion/scene tag or sticker name to match, e.g. '开心', 'sad', '猫猫疑惑'."),
         stickerId: z.string().optional().describe("Exact sticker id from list_available_stickers; overrides query matching.")
       },
+      outputSchema: stickerPayloadSchema,
       annotations: {
         readOnlyHint: true,
         destructiveHint: false,
@@ -267,6 +286,7 @@ export function createStickerServer(
           .refine((value) => value.startsWith("https://") || value.startsWith("http://"), "Must be an http(s) URL, not a data URI.")
           .describe("Public http(s) image URL only. Do not pass data:image or base64.")
       },
+      outputSchema: stickerUploadSchema,
       annotations: {
         readOnlyHint: false,
         destructiveHint: false,

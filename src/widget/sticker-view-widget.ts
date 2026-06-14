@@ -56,6 +56,18 @@ function showError(msg: string) {
   if (root) root.innerHTML = `<div class="err">${msg}</div>`;
 }
 
+function renderToolResult(params: { structuredContent?: unknown; content?: Array<{ type: string; text?: string }> }, platform: "chatgpt" | "claude") {
+  let data = coerce(params?.structuredContent);
+  if (!data && Array.isArray(params?.content)) {
+    for (const block of params.content) {
+      if (block.type === "text" && block.text) {
+        try { const p = JSON.parse(block.text); data = coerce(p); if (data) break; } catch { /* not json */ }
+      }
+    }
+  }
+  if (data) render(data, platform);
+}
+
 function tryChatGpt() {
   if (!window.openai) return;
   const apply = () => {
@@ -64,6 +76,13 @@ function tryChatGpt() {
   };
   apply();
   window.addEventListener("openai:set_globals", apply as EventListener);
+  window.addEventListener("message", (event) => {
+    if (event.source !== window.parent) return;
+    const message = event.data;
+    if (!message || message.jsonrpc !== "2.0") return;
+    if (message.method !== "ui/notifications/tool-result") return;
+    renderToolResult(message.params, "chatgpt");
+  }, { passive: true });
 }
 
 async function tryMcpApps() {
@@ -72,15 +91,7 @@ async function tryMcpApps() {
     /* Register before connect() — host may send toolresult during/right after handshake */
     app.addEventListener("toolresult", (params: { structuredContent?: unknown; content?: Array<{ type: string; text?: string }> }) => {
       console.debug("[sticker] ontoolresult:", JSON.stringify(params)?.slice(0, 300));
-      let data = coerce(params?.structuredContent);
-      if (!data && Array.isArray(params?.content)) {
-        for (const block of params.content) {
-          if (block.type === "text" && block.text) {
-            try { const p = JSON.parse(block.text); data = coerce(p); if (data) break; } catch { /* not json */ }
-          }
-        }
-      }
-      if (data) render(data, "claude");
+      renderToolResult(params, "claude");
     });
     await app.connect();
   } catch (e) {
