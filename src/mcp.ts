@@ -75,6 +75,42 @@ async function detectMime(buffer: Buffer, fallback: string): Promise<string> {
   return fallback;
 }
 
+async function readImageInput(image: string): Promise<{ buffer: Buffer; mimeType: string }> {
+  let buffer: Buffer;
+  let mimeType: string;
+
+  if (image.startsWith("data:image/")) {
+    const match = /^data:(image\/[\w.+-]+);base64,(.+)$/s.exec(image);
+    if (!match || !match[1] || !match[2]) throw new Error("Malformed data URI.");
+    mimeType = match[1];
+    buffer = Buffer.from(match[2], "base64");
+  } else {
+    const parsed = new URL(image);
+    if (parsed.protocol !== "https:" && parsed.protocol !== "http:") {
+      throw new Error("Only http(s) image URLs or data:image base64 URIs are supported.");
+    }
+    const res = await fetch(parsed, { redirect: "follow", signal: AbortSignal.timeout(20_000) });
+    if (!res.ok) throw new Error(`Download failed: HTTP ${res.status}`);
+    const declared = res.headers.get("content-type")?.split(";")[0]?.trim() || "image/png";
+    const bytes = Buffer.from(await res.arrayBuffer());
+    if (bytes.length > MAX_DOWNLOAD_BYTES) throw new Error("Image exceeds the 8MB limit.");
+    buffer = bytes;
+    mimeType = declared;
+  }
+
+  mimeType = await detectMime(buffer, mimeType);
+  if (!ALLOWED_MIME.includes(mimeType)) {
+    throw new Error(`Unsupported image type '${mimeType}'. Allowed: ${ALLOWED_MIME.join(", ")}`);
+  }
+  if (buffer.length > MAX_DOWNLOAD_BYTES) throw new Error("Image exceeds the 8MB limit.");
+  return { buffer, mimeType };
+}
+
+async function addStickerFromImageInput(storage: StickerStorage, name: string, emotions: string[], image: string) {
+  const { buffer, mimeType } = await readImageInput(image);
+  return storage.addSticker(name, emotions, buffer, mimeType);
+}
+
 export interface CreateServerOptions {
   /** Tools that read the server's local filesystem are only safe on local stdio transport. */
   allowLocalFileAccess?: boolean;
@@ -194,12 +230,57 @@ export function createStickerServer(
   );
 
   server.registerTool(
+    "add_sticker",
+    {
+      title: "Add Sticker",
+      description:
+        "Add the user's provided image to the sticker library. Use this directly when the user asks to add an attached/shared image as a sticker. " +
+        "Pass `image` as either a public http(s) image URL or a data:image/...;base64,... URI built from the provided image bytes. " +
+        "Do not use web search, connector search, artifacts, shell, or curl for this; call this MCP tool directly. " +
+        "Ask for or infer a short name plus 1-8 emotion/scene tags. Supported formats: png / jpeg / gif / webp / avif, max 8MB.",
+      inputSchema: {
+        name: z.string().min(1).max(60).describe("Short display name, e.g. 'Claude酱点赞'."),
+        emotions: z
+          .array(z.string().min(1).max(30))
+          .min(1)
+          .max(8)
+          .describe("Emotion/scene tags describing when to send it, e.g. ['点赞', '开心', '赞', 'thumbs up']."),
+        image: z.string().min(8).describe("Public http(s) image URL, or a data:image/...;base64,... URI for the image.")
+      },
+      annotations: {
+        readOnlyHint: false,
+        destructiveHint: false,
+        idempotentHint: false,
+        openWorldHint: true
+      }
+    },
+    async ({ name, emotions, image }) => {
+      try {
+        const sticker = await addStickerFromImageInput(storage, name, emotions, image);
+        return {
+          content: [
+            {
+              type: "text",
+              text: `Added sticker '${sticker.name}' (id ${sticker.id}, tags: ${sticker.emotions.join(", ")}). You can send it right away with send_sticker.`
+            }
+          ]
+        };
+      } catch (e) {
+        return {
+          content: [{ type: "text", text: `Failed to add sticker: ${e instanceof Error ? e.message : String(e)}` }],
+          isError: true
+        };
+      }
+    }
+  );
+
+  server.registerTool(
     "add_sticker_by_url",
     {
       title: "Add Sticker From URL",
       description:
-        "Download an image from an https:// URL (or accept a data: URI) and save it as a new sticker. " +
-        "Use this when the user shares an image link and asks to add it as a sticker (帮我把这张图加成表情包). " +
+        "Download an image from an http(s) URL (or accept a data:image base64 URI) and save it as a new sticker. " +
+        "Use add_sticker instead when the user provided an attached image. " +
         "Ask the user (or infer from the image) a short name plus 1-5 emotion/scene tags describing when to use it. " +
         "Supported formats: png / jpeg / gif / webp / avif, max 8MB.",
       inputSchema: {
@@ -220,35 +301,7 @@ export function createStickerServer(
     },
     async ({ name, emotions, url }) => {
       try {
-        let buffer: Buffer;
-        let mimeType: string;
-
-        if (url.startsWith("data:image/")) {
-          const match = /^data:(image\/[\w.+-]+);base64,(.+)$/s.exec(url);
-          if (!match || !match[1] || !match[2]) throw new Error("Malformed data URI.");
-          mimeType = match[1];
-          buffer = Buffer.from(match[2], "base64");
-        } else {
-          const parsed = new URL(url);
-          if (parsed.protocol !== "https:" && parsed.protocol !== "http:") {
-            throw new Error("Only http(s) or data:image URLs are supported.");
-          }
-          const res = await fetch(parsed, { redirect: "follow", signal: AbortSignal.timeout(20_000) });
-          if (!res.ok) throw new Error(`Download failed: HTTP ${res.status}`);
-          const declared = res.headers.get("content-type")?.split(";")[0]?.trim() || "image/png";
-          const bytes = Buffer.from(await res.arrayBuffer());
-          if (bytes.length > MAX_DOWNLOAD_BYTES) throw new Error("Image exceeds the 8MB limit.");
-          buffer = bytes;
-          mimeType = declared;
-        }
-
-        mimeType = await detectMime(buffer, mimeType);
-        if (!ALLOWED_MIME.includes(mimeType)) {
-          throw new Error(`Unsupported image type '${mimeType}'. Allowed: ${ALLOWED_MIME.join(", ")}`);
-        }
-        if (buffer.length > MAX_DOWNLOAD_BYTES) throw new Error("Image exceeds the 8MB limit.");
-
-        const sticker = await storage.addSticker(name, emotions, buffer, mimeType);
+        const sticker = await addStickerFromImageInput(storage, name, emotions, url);
         return {
           content: [
             {

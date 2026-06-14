@@ -51,15 +51,14 @@ body { min-height:100dvh; font-family:var(--font); background:var(--bg); color:v
 .seg button.on { background:var(--surface); color:var(--text); box-shadow:var(--shadow); font-weight:600; }
 
 .sec-head { display:flex; align-items:baseline; gap:13px; margin:34px 0 16px; }
-.sec-head .eyebrow { width:10px; height:18px; background:var(--accent-soft);
-                     border-radius:3px; transform:skewX(var(--skew)); align-self:center; }
+.sec-head .eyebrow { display:none; }
 .sec-head h2 { font-size:19px; font-weight:700; }
 .sec-head .jp { font-size:12px; color:var(--text-3); letter-spacing:.08em; }
 
 .panel { background:var(--surface); border:1px solid var(--border);
          border-radius:var(--radius-l); padding:20px; box-shadow:var(--shadow); }
 
-.drop { border:1.5px dashed var(--border-strong); border-radius:var(--radius-m);
+.drop { display:block; border:1.5px dashed var(--border-strong); border-radius:var(--radius-m);
         padding:26px 18px; text-align:center; color:var(--text-2); cursor:pointer;
         transition:all var(--ease); font-size:14px; }
 .drop em { font-style:normal; color:var(--accent); font-weight:600; }
