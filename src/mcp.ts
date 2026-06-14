@@ -32,7 +32,7 @@ const stickerUploadSchema = {
 function cspMeta(config: AppConfig) {
   const origins = imageOrigins(config);
   return {
-    ui: { domain: WIDGET_DOMAIN, csp: { resourceDomains: origins, connectDomains: origins } },
+    ui: { csp: { resourceDomains: origins, connectDomains: origins } },
     "openai/widgetDomain": WIDGET_DOMAIN,
     "openai/widgetCSP": { resource_domains: origins, connect_domains: origins }
   };
