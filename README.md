@@ -32,7 +32,7 @@ An MCP server that lets AI send expressive stickers (表情包) directly into th
 |---|---|
 | `send_sticker` | Pick a sticker by emotion/scene `query` (or exact `stickerId`) and render it in chat. Random pick among multiple matches. On no match, returns the catalog so the AI can retry. |
 | `list_available_stickers` | Catalog of `{id, name, tags}` — the AI calls this once per conversation to know what moods it can express. |
-| `add_sticker` | Download an image from an existing http(s) URL or save a small `data:image/...` URI as a sticker with name + tags. |
+| `add_sticker` | Download an image from an existing public http(s) URL as a sticker with name + tags. It does not accept base64/data URIs. |
 | `create_sticker_upload` | Create a 10-minute one-time PUT URL on this sticker library so the AI can upload attached image bytes directly here, without third-party image hosts. |
 | `add_sticker_by_path` | (stdio/local only) Add a sticker from a local file path. |
 

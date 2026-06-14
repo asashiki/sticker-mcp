@@ -32,7 +32,7 @@
 |---|---|
 | `send_sticker` | 按情绪/场景词 `query`（或精确 `stickerId`）选图并渲染到对话。多个匹配时随机挑一张；匹配不到返回完整目录供 AI 重试。 |
 | `list_available_stickers` | 返回 `{id, name, tags}` 目录，AI 每段对话开头看一次就知道能表达哪些情绪。 |
-| `add_sticker` | 从已有 http(s) 图片 URL 或较小的 `data:image/...` 保存新表情，带名称和 1-8 个标签。 |
+| `add_sticker` | 从已有公网 http(s) 图片 URL 保存新表情，带名称和 1-8 个标签；不接受 base64/data URI。 |
 | `create_sticker_upload` | 创建一个 10 分钟有效的一次性 PUT 上传 URL，让 AI 把附件图片 bytes 直接上传到这个贴纸库，不再绕第三方图床。 |
 | `add_sticker_by_path` | （仅本地 stdio）从本地文件路径加表情。 |
 

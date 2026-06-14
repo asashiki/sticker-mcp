@@ -76,28 +76,25 @@ async function detectMime(buffer: Buffer, fallback: string): Promise<string> {
   return fallback;
 }
 
-async function readImageInput(image: string): Promise<{ buffer: Buffer; mimeType: string }> {
+async function readImageUrl(imageUrl: string): Promise<{ buffer: Buffer; mimeType: string }> {
   let buffer: Buffer;
   let mimeType: string;
 
-  if (image.startsWith("data:image/")) {
-    const match = /^data:(image\/[\w.+-]+);base64,(.+)$/s.exec(image);
-    if (!match || !match[1] || !match[2]) throw new Error("Malformed data URI.");
-    mimeType = match[1];
-    buffer = Buffer.from(match[2], "base64");
-  } else {
-    const parsed = new URL(image);
-    if (parsed.protocol !== "https:" && parsed.protocol !== "http:") {
-      throw new Error("Only http(s) image URLs or data:image base64 URIs are supported.");
-    }
-    const res = await fetch(parsed, { redirect: "follow", signal: AbortSignal.timeout(20_000) });
-    if (!res.ok) throw new Error(`Download failed: HTTP ${res.status}`);
-    const declared = res.headers.get("content-type")?.split(";")[0]?.trim() || "image/png";
-    const bytes = Buffer.from(await res.arrayBuffer());
-    if (bytes.length > MAX_DOWNLOAD_BYTES) throw new Error("Image exceeds the 8MB limit.");
-    buffer = bytes;
-    mimeType = declared;
+  if (imageUrl.startsWith("data:image/")) {
+    throw new Error("add_sticker does not accept data URI or base64 image data. Use create_sticker_upload and upload the original image bytes to the returned uploadUrl.");
   }
+
+  const parsed = new URL(imageUrl);
+  if (parsed.protocol !== "https:" && parsed.protocol !== "http:") {
+    throw new Error("Only public http(s) image URLs are supported. For attached image files, use create_sticker_upload.");
+  }
+  const res = await fetch(parsed, { redirect: "follow", signal: AbortSignal.timeout(20_000) });
+  if (!res.ok) throw new Error(`Download failed: HTTP ${res.status}`);
+  const declared = res.headers.get("content-type")?.split(";")[0]?.trim() || "image/png";
+  const bytes = Buffer.from(await res.arrayBuffer());
+  if (bytes.length > MAX_DOWNLOAD_BYTES) throw new Error("Image exceeds the 8MB limit.");
+  buffer = bytes;
+  mimeType = declared;
 
   mimeType = await detectMime(buffer, mimeType);
   if (!ALLOWED_MIME.includes(mimeType)) {
@@ -107,22 +104,22 @@ async function readImageInput(image: string): Promise<{ buffer: Buffer; mimeType
   return { buffer, mimeType };
 }
 
-function describeImageInput(image: string): string {
-  if (image.startsWith("data:image/")) {
-    const match = /^data:(image\/[\w.+-]+);base64,(.+)$/s.exec(image);
+function describeImageUrl(imageUrl: string): string {
+  if (imageUrl.startsWith("data:image/")) {
+    const match = /^data:(image\/[\w.+-]+);base64,(.+)$/s.exec(imageUrl);
     const byteLength = match?.[2] ? Buffer.byteLength(match[2], "base64") : 0;
-    return `data-uri ${match?.[1] ?? "unknown"} ${byteLength} bytes`;
+    return `rejected data-uri ${match?.[1] ?? "unknown"} ${byteLength} bytes`;
   }
   try {
-    const url = new URL(image);
+    const url = new URL(imageUrl);
     return `${url.protocol}//${url.host}${url.pathname}`;
   } catch {
-    return "invalid image input";
+    return "invalid image URL";
   }
 }
 
-async function addStickerFromImageInput(storage: StickerStorage, name: string, emotions: string[], image: string) {
-  const { buffer, mimeType } = await readImageInput(image);
+async function addStickerFromImageUrl(storage: StickerStorage, name: string, emotions: string[], imageUrl: string) {
+  const { buffer, mimeType } = await readImageUrl(imageUrl);
   return storage.addSticker(name, emotions, buffer, mimeType);
 }
 
@@ -254,8 +251,8 @@ export function createStickerServer(
     {
       title: "Add Sticker",
       description:
-        "Add an image to the sticker library from an existing public http(s) image URL, or a small exact data:image/...;base64,... URI. " +
-        "If you have the user's attached image bytes/file, or the data URI would be too large for tool arguments, call create_sticker_upload instead and upload directly to this sticker library. Do not use third-party image hosts. " +
+        "Add an image to the sticker library from an existing public http(s) image URL only. Do not pass data:image URIs or base64 here. " +
+        "If you have the user's attached image bytes/file, call create_sticker_upload instead and upload the original bytes directly to this sticker library. Do not use third-party image hosts. " +
         "If the user already described what the image is, do not spend tokens visually analyzing it; use the user's description to choose the name and tags. If the user did not describe it, inspect the image enough to choose a short name plus 1-8 emotion/scene tags. Supported formats: png / jpeg / gif / webp / avif, max 8MB.",
       inputSchema: {
         name: z.string().min(1).max(60).describe("Short display name, e.g. 'Claude酱点赞'."),
@@ -264,7 +261,11 @@ export function createStickerServer(
           .min(1)
           .max(8)
           .describe("Emotion/scene tags describing when to send it, e.g. ['点赞', '开心', '赞', 'thumbs up']."),
-        image: z.string().min(8).describe("Public http(s) image URL, or a data:image/...;base64,... URI for the image.")
+        imageUrl: z
+          .string()
+          .url()
+          .refine((value) => value.startsWith("https://") || value.startsWith("http://"), "Must be an http(s) URL, not a data URI.")
+          .describe("Public http(s) image URL only. Do not pass data:image or base64.")
       },
       annotations: {
         readOnlyHint: false,
@@ -273,10 +274,10 @@ export function createStickerServer(
         openWorldHint: true
       }
     },
-    async ({ name, emotions, image }) => {
-      console.log(`[add_sticker] requested name="${name}" tags=${JSON.stringify(emotions)} image=${describeImageInput(image)}`);
+    async ({ name, emotions, imageUrl }) => {
+      console.log(`[add_sticker] requested name="${name}" tags=${JSON.stringify(emotions)} imageUrl=${describeImageUrl(imageUrl)}`);
       try {
-        const sticker = await addStickerFromImageInput(storage, name, emotions, image);
+        const sticker = await addStickerFromImageUrl(storage, name, emotions, imageUrl);
         console.log(`[add_sticker] added id=${sticker.id} name="${sticker.name}" mime=${sticker.mimeType}`);
         return {
           content: [
@@ -301,7 +302,7 @@ export function createStickerServer(
     {
       title: "Create Sticker Upload URL",
       description:
-        "Create a one-time upload URL on this sticker library for the user's attached image bytes/file. Use this when adding a sticker from an attachment, especially when base64 would be too large. " +
+        "Create a one-time upload URL on this sticker library for the user's attached image bytes/file. Use this when adding a sticker from an attachment. " +
         "After this tool returns, upload the original image bytes directly to uploadUrl with HTTP PUT and Content-Type image/png, image/jpeg, image/gif, image/webp, or image/avif. The sticker is saved as soon as the PUT succeeds; do not call add_sticker afterwards. " +
         "Do not upload the image to third-party image hosts. Do not curl the MCP endpoint. If the user already told you what the image is, skip visual analysis and use that description for the name and tags. If not, inspect the image enough to name and tag it. The URL expires in 10 minutes.",
       inputSchema: {
