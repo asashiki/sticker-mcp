@@ -26,6 +26,20 @@ An MCP server that lets AI send expressive stickers (表情包) directly into th
 - **Standalone admin page** — `/admin` is a plain web page (no MCP host needed): drag & drop / paste upload, batch add, tag editing, search, delete. Optionally protected by `ADMIN_TOKEN`.
 - **Simple storage** — JSON + image files on disk. No database.
 
+## Live preview
+
+Project showcase: <https://show.asashiki.com/projects/sticker-mcp.html>
+
+<!--
+Screenshot slot:
+Keep the image constrained so it supports the README instead of taking over it.
+Recommended capture: desktop admin console with the upload area and sticker grid visible.
+
+<p align="center">
+  <img src=".github/assets/admin-console-preview.png" alt="sticker-mcp admin console showing sticker images, names, and tags" width="760">
+</p>
+-->
+
 ## Tools
 
 | Tool | Purpose |

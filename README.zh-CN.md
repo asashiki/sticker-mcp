@@ -26,6 +26,20 @@
 - **独立管理页** — `/admin` 是一个纯网页（不依赖任何 MCP 客户端）：拖拽/粘贴批量上传、缩略图预览、改名改标签、搜索、删除，浅色/深色主题切换，可用 `ADMIN_TOKEN` 加口令保护。
 - **存储极简** — JSON + 图片文件落盘，零数据库。
 
+## 在线预览
+
+项目展示页：<https://show.asashiki.com/projects/sticker-mcp.html>
+
+<!--
+截图占位：
+图片应保持受控宽度，用来辅助 README，而不是压住正文。
+推荐截图：桌面端管理后台，同时露出上传区和表情图库。
+
+<p align="center">
+  <img src=".github/assets/admin-console-preview.png" alt="sticker-mcp 管理后台，展示表情图片、名称与标签" width="760">
+</p>
+-->
+
 ## 工具一览
 
 | 工具 | 用途 |
