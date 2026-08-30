@@ -9,6 +9,17 @@ services:
       - DATA_DIR=/app/data
     ports:
       - "127.0.0.1:3000:3000"
+    init: true
+    read_only: true
+    tmpfs:
+      - /tmp:size=32m,mode=1777
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    pids_limit: 128
+    mem_limit: 768m
+    cpus: 1.0
     volumes:
       - sticker_data:/app/data
 

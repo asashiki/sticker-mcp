@@ -25,6 +25,8 @@ An MCP server that lets AI send expressive stickers (表情包) directly into th
 - **AI can grow the library** — `create_sticker_upload` gives the AI a one-time upload URL on this sticker library for attached image bytes; `add_sticker` still accepts an existing image URL. On local stdio there is also `add_sticker_by_path`.
 - **Standalone admin page** — `/admin` is a plain web page (no MCP host needed): drag & drop / paste upload, batch add, tag editing, search, delete. Optionally protected by `ADMIN_TOKEN`.
 - **Simple storage** — JSON + image files on disk. No database.
+- **Protocol and host compatibility** — one endpoint serves MCP `2026-07-28` and legacy 2025 clients; standard MCP Apps `ui/*` is primary and `window.openai` is a progressive ChatGPT fallback.
+- **Public-network safety** — OAuth 2.1 S256 PKCE with RFC 8707 resource/audience binding, Host/Origin checks, and redirect-aware SSRF plus streaming size limits for external images.
 
 ## Live preview
 
@@ -54,7 +56,7 @@ Recommended capture: desktop admin console with the upload area and sticker grid
 
 - **Local stdio**: `node dist/stdio.js` (or `npm run dev:stdio`).
 - **Remote Streamable HTTP**: `node dist/server.js`, MCP endpoint at `MCP_HTTP_PATH` (default `/mcp/sticker`, `/mcp` kept as alias).
-- HTTP server also serves: `/images/:filename` (sticker images for the widget), `/admin` (management page), `/api/stickers` (REST for the admin page), `/api/stickers/upload/:token` (one-time direct uploads created by the MCP tool), `/healthz`.
+- HTTP server also serves: `/images/:filename` (sticker images for the widget), `/admin` (management page), `/api/stickers` (REST for the admin page), `/api/stickers/upload/:token` (one-time direct uploads), `/healthz`, and `/diagnostics/mcp-app`.
 
 ## Quick start (local)
 
@@ -86,7 +88,7 @@ npm run start:stdio
 3. Reverse-proxy `https://your-domain/mcp/sticker` to the container's `:3000` (same path), plus `/images/*`, `/admin`, `/api/*`.
 4. In claude.ai -> Settings -> Connectors -> add custom connector with URL `https://your-domain/mcp/sticker`. If `MCP_AUTH_PASSWORD` is set, the connector will use OAuth dynamic client registration and show the password authorization page.
 
-> Hosts cache `ui://` resources by URI. If you modify the widget, bump the version suffix in `src/widget/sticker-view-html.ts` (`mcp-app-v2.html` → `v3` ...).
+> Hosts cache `ui://` resources by URI. If you modify the widget, bump the URI version in `src/widget/sticker-view-html.ts`.
 
 ## Configuration
 
@@ -98,13 +100,16 @@ See `.env.example`. Summary:
 | `PORT` | `3000` | HTTP port. |
 | `MCP_HTTP_PATH` | `/mcp/sticker` | Streamable HTTP MCP route. |
 | `ALLOWED_ORIGINS` | PUBLIC_BASE_URL origin | CORS allowlist, comma separated. |
+| `ALLOWED_HOSTS` | public hostname + loopback | Allowed MCP Host headers (DNS rebinding defense). |
+| `MCP_WIDGET_DOMAIN` | _(empty)_ | Set only when a dedicated HTTPS widget origin really exists. |
 | `MCP_AUTH_PASSWORD` | _(empty)_ | Optional password gate for remote connectors. Leave empty to disable auth. |
+| `MCP_AUTH_TOKEN_SECRET` | MCP_AUTH_PASSWORD | Stable high-entropy access-token signing secret. |
 | `DATA_DIR` | `./data` | stickers.json + images/. |
-| `ADMIN_TOKEN` | _(empty)_ | If set, `/admin` + `/api/*` require it (Bearer header or `?token=`). |
+| `ADMIN_TOKEN` | _(empty)_ | Protects `/api/*` via Bearer only; the admin shell prompts locally and query tokens are rejected. |
 
 ## OAuth password auth
 
-Set `MCP_AUTH_PASSWORD` to enable a minimal OAuth Authorization Code flow for remote connectors. The server exposes OAuth discovery and dynamic client registration, so clients that support automatic registration can connect without a manually configured Client ID. During connection, enter the configured password on the authorization page.
+Set `MCP_AUTH_PASSWORD` to enable OAuth 2.1 Authorization Code + S256 PKCE. Codes are bound to the client, exact redirect URI, scope and MCP resource; access tokens are audience-bound to the canonical `/mcp/sticker` URL.
 
 ## Development
 
@@ -112,6 +117,7 @@ Set `MCP_AUTH_PASSWORD` to enable a minimal OAuth Authorization Code flow for re
 npm run dev          # HTTP server with reload
 npm run typecheck
 npm run build        # server (tsup) + widget (IIFE) + admin assets
+npm test             # build + protocol/OAuth/SSRF/HTTP boundary tests
 ```
 
 Code layout: `src/mcp.ts` (tool/resource registration) · `src/server.ts` (HTTP transport + REST + static) · `src/stdio.ts` (local transport) · `src/storage.ts` (JSON + sharp) · `src/widget/` (MCP Apps widget) · `src/admin/` (standalone admin page).
