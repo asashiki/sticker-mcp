@@ -1,4 +1,4 @@
-import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { McpServer } from "@modelcontextprotocol/server";
 import { z } from "zod";
 import path from "node:path";
 import fs from "node:fs/promises";
@@ -7,34 +7,46 @@ import type { AppConfig } from "./config.js";
 import { imageOrigins } from "./config.js";
 import type { Sticker, StickerStorage } from "./storage.js";
 import { createStickerUploadSlot } from "./upload-slots.js";
+import { fetchPublicUrl, readBytesLimited } from "./url-policy.js";
 import { STICKER_VIEW_MIME, STICKER_VIEW_URI, stickerViewHtml } from "./widget/sticker-view-html.js";
 
 const MAX_DOWNLOAD_BYTES = 8 * 1024 * 1024;
 const ALLOWED_MIME = ["image/png", "image/jpeg", "image/gif", "image/webp", "image/avif"];
-const WIDGET_DOMAIN = "https://sticker-mcp.asashiki.com";
-const stickerPayloadSchema = {
+const stickerPayloadSchema = z.object({
   id: z.string(),
   name: z.string(),
   emotions: z.array(z.string()),
   imageUrl: z.string(),
   mimeType: z.string(),
   matchedQuery: z.string()
-};
-const stickerUploadSchema = {
+});
+const stickerUploadSchema = z.object({
   uploadUrl: z.string(),
   method: z.literal("PUT"),
   expiresAt: z.string(),
   maxBytes: z.number(),
   name: z.string(),
   emotions: z.array(z.string())
-};
+});
+const stickerAddedSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  emotions: z.array(z.string()),
+  mimeType: z.string()
+});
 
 function cspMeta(config: AppConfig) {
   const origins = imageOrigins(config);
+  const ui = {
+    prefersBorder: false,
+    csp: { resourceDomains: origins, connectDomains: origins },
+    ...(config.widgetDomain ? { domain: config.widgetDomain } : {})
+  };
   return {
-    ui: { csp: { resourceDomains: origins, connectDomains: origins } },
-    "openai/widgetDomain": WIDGET_DOMAIN,
-    "openai/widgetCSP": { resource_domains: origins, connect_domains: origins }
+    ui,
+    "openai/widgetPrefersBorder": false,
+    "openai/widgetCSP": { resource_domains: origins, connect_domains: origins },
+    ...(config.widgetDomain ? { "openai/widgetDomain": config.widgetDomain } : {})
   };
 }
 
@@ -56,12 +68,12 @@ async function toPayload(
 ): Promise<StickerPayload> {
   let imageUrl: string;
   let mimeType = sticker.mimeType;
-  if (config.publicBaseUrl) {
-    imageUrl = `${config.publicBaseUrl}/images/${storage.publicFilename(sticker)}`;
-  } else {
+  if (config.inlineImages) {
     const inline = await storage.readForInline(sticker);
     mimeType = inline.mimeType;
     imageUrl = `data:${mimeType};base64,${inline.buffer.toString("base64")}`;
+  } else {
+    imageUrl = `${config.publicBaseUrl}/images/${storage.publicFilename(sticker)}`;
   }
   return { id: sticker.id, name: sticker.name, emotions: sticker.emotions, imageUrl, mimeType, matchedQuery };
 }
@@ -106,11 +118,13 @@ async function readImageUrl(imageUrl: string): Promise<{ buffer: Buffer; mimeTyp
   if (parsed.protocol !== "https:" && parsed.protocol !== "http:") {
     throw new Error("Only public http(s) image URLs are supported. For attached image files, use create_sticker_upload.");
   }
-  const res = await fetch(parsed, { redirect: "follow", signal: AbortSignal.timeout(20_000) });
+  const res = await fetchPublicUrl(parsed, {
+    signal: AbortSignal.timeout(20_000),
+    headers: { "User-Agent": "sticker-mcp/1.2", Accept: "image/*" }
+  });
   if (!res.ok) throw new Error(`Download failed: HTTP ${res.status}`);
   const declared = res.headers.get("content-type")?.split(";")[0]?.trim() || "image/png";
-  const bytes = Buffer.from(await res.arrayBuffer());
-  if (bytes.length > MAX_DOWNLOAD_BYTES) throw new Error("Image exceeds the 8MB limit.");
+  const bytes = await readBytesLimited(res, MAX_DOWNLOAD_BYTES);
   buffer = bytes;
   mimeType = declared;
 
@@ -118,7 +132,6 @@ async function readImageUrl(imageUrl: string): Promise<{ buffer: Buffer; mimeTyp
   if (!ALLOWED_MIME.includes(mimeType)) {
     throw new Error(`Unsupported image type '${mimeType}'. Allowed: ${ALLOWED_MIME.join(", ")}`);
   }
-  if (buffer.length > MAX_DOWNLOAD_BYTES) throw new Error("Image exceeds the 8MB limit.");
   return { buffer, mimeType };
 }
 
@@ -142,8 +155,7 @@ async function addStickerFromImageUrl(storage: StickerStorage, name: string, emo
 }
 
 function uploadUrl(config: AppConfig, token: string) {
-  const base = config.publicBaseUrl ?? `http://127.0.0.1:${config.port}`;
-  return `${base}/api/stickers/upload/${token}`;
+  return `${config.publicBaseUrl}/api/stickers/upload/${token}`;
 }
 
 export interface CreateServerOptions {
@@ -156,7 +168,7 @@ export function createStickerServer(
   storage: StickerStorage,
   options: CreateServerOptions = {}
 ): McpServer {
-  const server = new McpServer({ name: "sticker-mcp", version: "1.1.0" });
+  const server = new McpServer({ name: "sticker-mcp", version: "1.2.0" });
   const csp = cspMeta(config);
   const widgetMeta = {
     ui: { resourceUri: STICKER_VIEW_URI },
@@ -190,14 +202,14 @@ export function createStickerServer(
         "Pick `query` based on the conversation's mood (an emotion or scene word such as 开心 / 委屈 / 干杯 / good night). " +
         "If you have not seen the library yet in this conversation, call list_available_stickers first and choose a tag from it. " +
         "If several stickers match, a random one is chosen — you can pass stickerId to force an exact sticker.",
-      inputSchema: {
+      inputSchema: z.object({
         query: z
           .string()
           .min(1)
           .max(60)
           .describe("Emotion/scene tag or sticker name to match, e.g. '开心', 'sad', '猫猫疑惑'."),
         stickerId: z.string().optional().describe("Exact sticker id from list_available_stickers; overrides query matching.")
-      },
+      }),
       outputSchema: stickerPayloadSchema,
       annotations: {
         readOnlyHint: true,
@@ -273,7 +285,7 @@ export function createStickerServer(
         "Add an image to the sticker library from an existing public http(s) image URL only. Do not pass data:image URIs or base64 here. " +
         "If you have the user's attached image bytes/file, call create_sticker_upload instead and upload the original bytes directly to this sticker library. Do not use third-party image hosts. " +
         "If the user already described what the image is, do not spend tokens visually analyzing it; use the user's description to choose the name and tags. If the user did not describe it, inspect the image enough to choose a short name plus 1-8 emotion/scene tags. Supported formats: png / jpeg / gif / webp / avif, max 8MB.",
-      inputSchema: {
+      inputSchema: z.object({
         name: z.string().min(1).max(60).describe("Short display name, e.g. 'Claude酱点赞'."),
         emotions: z
           .array(z.string().min(1).max(30))
@@ -285,8 +297,8 @@ export function createStickerServer(
           .url()
           .refine((value) => value.startsWith("https://") || value.startsWith("http://"), "Must be an http(s) URL, not a data URI.")
           .describe("Public http(s) image URL only. Do not pass data:image or base64.")
-      },
-      outputSchema: stickerUploadSchema,
+      }),
+      outputSchema: stickerAddedSchema,
       annotations: {
         readOnlyHint: false,
         destructiveHint: false,
@@ -299,13 +311,20 @@ export function createStickerServer(
       try {
         const sticker = await addStickerFromImageUrl(storage, name, emotions, imageUrl);
         console.log(`[add_sticker] added id=${sticker.id} name="${sticker.name}" mime=${sticker.mimeType}`);
+        const output = {
+          id: sticker.id,
+          name: sticker.name,
+          emotions: sticker.emotions,
+          mimeType: sticker.mimeType
+        };
         return {
           content: [
             {
               type: "text",
               text: `Added sticker '${sticker.name}' (id ${sticker.id}, tags: ${sticker.emotions.join(", ")}). You can send it right away with send_sticker.`
             }
-          ]
+          ],
+          structuredContent: output
         };
       } catch (e) {
         console.warn(`[add_sticker] failed name="${name}": ${e instanceof Error ? e.message : String(e)}`);
@@ -325,14 +344,15 @@ export function createStickerServer(
         "Create a one-time upload URL on this sticker library for the user's attached image bytes/file. Use this when adding a sticker from an attachment. " +
         "After this tool returns, upload the original image bytes directly to uploadUrl with HTTP PUT and Content-Type image/png, image/jpeg, image/gif, image/webp, or image/avif. The sticker is saved as soon as the PUT succeeds; do not call add_sticker afterwards. " +
         "Do not upload the image to third-party image hosts. Do not curl the MCP endpoint. If the user already told you what the image is, skip visual analysis and use that description for the name and tags. If not, inspect the image enough to name and tag it. The URL expires in 10 minutes.",
-      inputSchema: {
+      inputSchema: z.object({
         name: z.string().min(1).max(60).describe("Short display name, e.g. 'Claude酱点赞'."),
         emotions: z
           .array(z.string().min(1).max(30))
           .min(1)
           .max(8)
           .describe("Emotion/scene tags describing when to send it, e.g. ['点赞', '开心', '赞', 'thumbs up'].")
-      },
+      }),
+      outputSchema: stickerUploadSchema,
       annotations: {
         readOnlyHint: false,
         destructiveHint: false,
@@ -374,11 +394,12 @@ export function createStickerServer(
         description:
           "Add a new sticker from an image file on this computer (local/stdio mode only). " +
           "Use when the user gives a local file path. Supported: png / jpeg / gif / webp / avif, max 8MB.",
-        inputSchema: {
+        inputSchema: z.object({
           name: z.string().min(1).max(60).describe("Short display name."),
           emotions: z.array(z.string().min(1).max(30)).min(1).max(8).describe("Emotion/scene tags."),
           filePath: z.string().describe("Absolute path to the image file.")
-        },
+        }),
+        outputSchema: stickerAddedSchema,
         annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false }
       },
       async ({ name, emotions, filePath }) => {
@@ -396,7 +417,13 @@ export function createStickerServer(
           if (!ALLOWED_MIME.includes(mimeType)) throw new Error(`Unsupported image type '${mimeType}'.`);
           const sticker = await storage.addSticker(name, emotions, buffer, mimeType);
           return {
-            content: [{ type: "text", text: `Added sticker '${sticker.name}' (id ${sticker.id}).` }]
+            content: [{ type: "text", text: `Added sticker '${sticker.name}' (id ${sticker.id}).` }],
+            structuredContent: {
+              id: sticker.id,
+              name: sticker.name,
+              emotions: sticker.emotions,
+              mimeType: sticker.mimeType
+            }
           };
         } catch (e) {
           return {

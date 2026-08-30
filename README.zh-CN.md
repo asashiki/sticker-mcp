@@ -25,6 +25,8 @@
 - **AI 帮你加表情** — `create_sticker_upload` 会给 AI 一个贴纸库上的一次性上传地址，用来把附件图片 bytes 直接传到你的贴纸库；`add_sticker` 仍支持已有图片 URL。本地 stdio 模式下还有 `add_sticker_by_path` 直接读本地文件。
 - **独立管理页** — `/admin` 是一个纯网页（不依赖任何 MCP 客户端）：拖拽/粘贴批量上传、缩略图预览、改名改标签、搜索、删除，浅色/深色主题切换，可用 `ADMIN_TOKEN` 加口令保护。
 - **存储极简** — JSON + 图片文件落盘，零数据库。
+- **协议与宿主兼容** — 同一个 HTTP 端点兼容 MCP `2026-07-28` 与旧版 2025 客户端；组件以标准 MCP Apps `ui/*` bridge 为主，`window.openai` 只作 ChatGPT 渐进兼容。
+- **公网安全边界** — OAuth 2.1 S256 PKCE、RFC 8707 resource/audience 绑定、Host/Origin 校验；外部图片逐跳校验 DNS/重定向并在流式读取时限制 8MB。
 
 ## 在线预览
 
@@ -54,7 +56,7 @@
 
 - **本地 stdio**：`node dist/stdio.js`（开发用 `npm run dev:stdio`）。
 - **远程 Streamable HTTP**：`node dist/server.js`，MCP 端点在 `MCP_HTTP_PATH`（默认 `/mcp/sticker`，同时保留 `/mcp` 别名方便本机测试）。
-- HTTP 服务还提供：`/images/:filename`（widget 加载表情图）、`/admin`（管理页）、`/api/stickers`（管理页 REST 接口）、`/api/stickers/upload/:token`（MCP 工具创建的一次性直传地址）、`/healthz`（健康检查）。
+- HTTP 服务还提供：`/images/:filename`（widget 加载表情图）、`/admin`（管理页）、`/api/stickers`（管理页 REST 接口）、`/api/stickers/upload/:token`（MCP 工具创建的一次性直传地址）、`/healthz`（健康检查）、`/diagnostics/mcp-app`（组件 URI/MIME/CSP 自检）。
 
 ## 快速开始（本地）
 
@@ -86,7 +88,7 @@ npm run start:stdio
 3. 反向代理 `https://你的域名/mcp/sticker` 到容器 `:3000` 同路径，另外把 `/images/*`、`/admin`、`/api/*` 也一起转发。
 4. claude.ai → 设置 → 连接器 → 添加自定义连接器，URL 填 `https://你的域名/mcp/sticker`。如果设置了 `MCP_AUTH_PASSWORD`，连接器会走 OAuth 动态客户端注册，并弹出密码授权页。
 
-> 宿主按 URI 缓存 `ui://` 资源。改过 widget 后记得升级 `src/widget/sticker-view-html.ts` 里的版本号（`mcp-app-v2.html` → `v3` ……），否则客户端拿到的还是旧版。
+> 宿主按 URI 缓存 `ui://` 资源。改过 widget 后记得升级 `src/widget/sticker-view-html.ts` 里的 URI 版本，否则客户端可能继续使用旧组件。
 
 ## 配置项
 
@@ -98,13 +100,18 @@ npm run start:stdio
 | `PORT` | `3000` | HTTP 端口。 |
 | `MCP_HTTP_PATH` | `/mcp/sticker` | Streamable HTTP MCP 路由。 |
 | `ALLOWED_ORIGINS` | PUBLIC_BASE_URL 的 origin | CORS 白名单，逗号分隔。 |
+| `ALLOWED_HOSTS` | PUBLIC_BASE_URL 主机名 + loopback | MCP 请求允许的 Host，抵御 DNS rebinding。 |
+| `MCP_WIDGET_DOMAIN` | _(空)_ | 仅在确实部署了独立 HTTPS widget origin 时填写；通常留空。 |
 | `MCP_AUTH_PASSWORD` | _(空)_ | 可选的远程连接器密码门禁。留空则关闭授权。 |
+| `MCP_AUTH_TOKEN_SECRET` | MCP_AUTH_PASSWORD | 稳定的高熵 Token 签名密钥；升级时保持不变。 |
 | `DATA_DIR` | `./data` | stickers.json 和 images/ 的位置。 |
-| `ADMIN_TOKEN` | _(空)_ | 设置后 `/admin` 和 `/api/*` 需要口令（Bearer 头或 `?token=`）。 |
+| `ADMIN_TOKEN` | _(空)_ | 设置后 `/api/*` 只接受 Bearer 头；管理页会本地询问口令，不接受 `?token=`。 |
 
 ## OAuth 密码授权
 
-设置 `MCP_AUTH_PASSWORD` 后，服务会启用一个最小 OAuth Authorization Code 流程，并暴露 OAuth discovery 与动态客户端注册端点。支持自动注册的客户端不需要手动填写 Client ID；连接时在授权页输入配置的密码即可。
+设置 `MCP_AUTH_PASSWORD` 后，服务会启用 OAuth 2.1 Authorization Code + S256 PKCE，并暴露 discovery 与动态客户端注册端点。授权码绑定 client、精确 redirect URI、scope 与 MCP resource，访问令牌也绑定 canonical `/mcp/sticker` audience。
+
+升级与回滚说明见 [`docs/MCP-APPS-SECURITY-1.2.zh-CN.md`](docs/MCP-APPS-SECURITY-1.2.zh-CN.md)。
 
 ## 开发
 
@@ -112,6 +119,7 @@ npm run start:stdio
 npm run dev          # HTTP 服务热重载
 npm run typecheck
 npm run build        # 服务端 (tsup) + widget (IIFE) + 管理页资源
+npm test             # 构建 + 协议/OAuth/SSRF/HTTP 边界测试
 ```
 
 代码结构：`src/mcp.ts`（工具/资源注册）· `src/server.ts`（HTTP 传输 + REST + 静态文件）· `src/stdio.ts`（本地传输）· `src/storage.ts`（JSON + sharp 缩略图）· `src/widget/`（MCP Apps widget）· `src/admin/`（独立管理页）。

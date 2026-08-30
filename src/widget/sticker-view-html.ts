@@ -3,7 +3,7 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 /** Bump the version suffix whenever the widget changes — hosts cache ui:// resources by URI. */
-export const STICKER_VIEW_URI = "ui://sticker-view/mcp-app-v7.html";
+export const STICKER_VIEW_URI = "ui://sticker-mcp/view-v8.html";
 export const STICKER_VIEW_MIME = "text/html;profile=mcp-app";
 
 const CSS = `
@@ -15,7 +15,7 @@ const CSS = `
   #root { padding: 4px 0; }
   .sticker { display: inline-block; }
   .sticker img {
-    display: block; max-width: 200px; max-height: 200px;
+    display: block; width: auto; height: auto; max-width: min(200px, 100vw); max-height: 200px;
     border-radius: 14px; user-select: none; -webkit-user-drag: none;
     animation: pop .32s cubic-bezier(.21, 1.25, .5, 1) both;
   }
@@ -33,7 +33,13 @@ function widgetJs(): string {
   if (cachedJs !== null) return cachedJs;
   try {
     const here = dirname(fileURLToPath(import.meta.url));
-    const jsPath = resolve(here, "widget/sticker-view-widget.global.js");
+    const jsPath = [
+      resolve(here, "widget/sticker-view-widget.global.js"),
+      resolve(process.cwd(), "dist/widget/sticker-view-widget.global.js")
+    ].find((candidate) => {
+      try { readFileSync(candidate); return true; } catch { return false; }
+    });
+    if (!jsPath) throw new Error("Widget bundle is missing");
     cachedJs = readFileSync(jsPath, "utf8");
   } catch {
     cachedJs = `document.getElementById("root").innerHTML='<div class="err">表情组件未构建（npm run build）</div>';`;
