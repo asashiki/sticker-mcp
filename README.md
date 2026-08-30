@@ -16,7 +16,11 @@
 
 # sticker-mcp
 
-An MCP server that lets AI send expressive stickers (表情包) directly into the chat, rendered inline via MCP Apps. Comes with a standalone web admin page for managing the sticker library, and tools that let the AI add new stickers for you.
+**Give your AI a sticker library it can actually use inside the chat.**
+
+The AI picks a sticker that fits the conversation and renders it inline; you manage the collection from a simple web page, and the AI can add new images for you.
+
+**[Open the live preview →](https://show.asashiki.com/projects/sticker-mcp.html)**
 
 ## Features
 
@@ -25,20 +29,6 @@ An MCP server that lets AI send expressive stickers (表情包) directly into th
 - **AI can grow the library** — `create_sticker_upload` gives the AI a one-time upload URL on this sticker library for attached image bytes; `add_sticker` still accepts an existing image URL. On local stdio there is also `add_sticker_by_path`.
 - **Standalone admin page** — `/admin` is a plain web page (no MCP host needed): drag & drop / paste upload, batch add, tag editing, search, delete. Optionally protected by `ADMIN_TOKEN`.
 - **Simple storage** — JSON + image files on disk. No database.
-
-## Live preview
-
-Project showcase: <https://show.asashiki.com/projects/sticker-mcp.html>
-
-<!--
-Screenshot slot:
-Keep the image constrained so it supports the README instead of taking over it.
-Recommended capture: desktop admin console with the upload area and sticker grid visible.
-
-<p align="center">
-  <img src=".github/assets/admin-console-preview.png" alt="sticker-mcp admin console showing sticker images, names, and tags" width="760">
-</p>
--->
 
 ## Tools
 

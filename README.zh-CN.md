@@ -16,7 +16,11 @@
 
 # sticker-mcp
 
-一个让 AI 在聊天里直接发表情包的 MCP 服务：表情图通过 MCP Apps 的 `ui://` widget 内联渲染在对话中（claude.ai 和 ChatGPT 网页端都支持），自带一个独立的网页管理后台，AI 还能帮你往表情库里加新图。
+**给 AI 一个它真的能在聊天里使用的表情包库。**
+
+AI 会根据对话气氛挑选并直接发出表情；你用一个简单网页管理图库，AI 也能帮你添加新图。
+
+**[打开在线预览 →](https://show.asashiki.com/projects/sticker-mcp.html)**
 
 ## 功能亮点
 
@@ -25,20 +29,6 @@
 - **AI 帮你加表情** — `create_sticker_upload` 会给 AI 一个贴纸库上的一次性上传地址，用来把附件图片 bytes 直接传到你的贴纸库；`add_sticker` 仍支持已有图片 URL。本地 stdio 模式下还有 `add_sticker_by_path` 直接读本地文件。
 - **独立管理页** — `/admin` 是一个纯网页（不依赖任何 MCP 客户端）：拖拽/粘贴批量上传、缩略图预览、改名改标签、搜索、删除，浅色/深色主题切换，可用 `ADMIN_TOKEN` 加口令保护。
 - **存储极简** — JSON + 图片文件落盘，零数据库。
-
-## 在线预览
-
-项目展示页：<https://show.asashiki.com/projects/sticker-mcp.html>
-
-<!--
-截图占位：
-图片应保持受控宽度，用来辅助 README，而不是压住正文。
-推荐截图：桌面端管理后台，同时露出上传区和表情图库。
-
-<p align="center">
-  <img src=".github/assets/admin-console-preview.png" alt="sticker-mcp 管理后台，展示表情图片、名称与标签" width="760">
-</p>
--->
 
 ## 工具一览
 
