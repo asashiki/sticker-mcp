@@ -1,4 +1,4 @@
-import { App } from "@modelcontextprotocol/ext-apps";
+import { connectWidget } from "./host-bridge.js";
 
 interface StickerData {
   imageUrl: string;
@@ -27,6 +27,7 @@ function coerce(data: unknown): StickerData | null {
 }
 
 let rendered = false;
+let cleanupCurrent = () => {};
 
 function render(data: StickerData, platform: "chatgpt" | "claude") {
   rendered = true;
@@ -56,58 +57,9 @@ function showError(msg: string) {
   if (root) root.innerHTML = `<div class="err">${msg}</div>`;
 }
 
-function renderToolResult(params: { structuredContent?: unknown; content?: Array<{ type: string; text?: string }> }, platform: "chatgpt" | "claude") {
-  let data = coerce(params?.structuredContent);
-  if (!data && Array.isArray(params?.content)) {
-    for (const block of params.content) {
-      if (block.type === "text" && block.text) {
-        try { const p = JSON.parse(block.text); data = coerce(p); if (data) break; } catch { /* not json */ }
-      }
-    }
-  }
-  if (data) render(data, platform);
-}
-
-function tryChatGpt() {
-  if (!window.openai) return;
-  const apply = () => {
-    const data = coerce(window.openai?.toolOutput);
-    if (data) render(data, "chatgpt");
-  };
-  apply();
-  window.addEventListener("openai:set_globals", apply as EventListener);
-  window.addEventListener("message", (event) => {
-    if (event.source !== window.parent) return;
-    const message = event.data;
-    if (!message || message.jsonrpc !== "2.0") return;
-    if (message.method !== "ui/notifications/tool-result") return;
-    renderToolResult(message.params, "chatgpt");
-  }, { passive: true });
-}
-
-async function tryMcpApps() {
-  try {
-    const app = new App({ name: "sticker-mcp", version: "1.1.0" });
-    /* Register before connect() — host may send toolresult during/right after handshake */
-    app.addEventListener("toolresult", (params: { structuredContent?: unknown; content?: Array<{ type: string; text?: string }> }) => {
-      console.debug("[sticker] ontoolresult:", JSON.stringify(params)?.slice(0, 300));
-      renderToolResult(params, "claude");
-    });
-    await app.connect();
-  } catch (e) {
-    console.debug("[sticker] MCP Apps connect skipped:", e);
-  }
-}
-
 function boot() {
-  /* Run both bridges in parallel — rendered flag prevents double-render */
-  tryChatGpt();
-  void tryMcpApps();
-  setTimeout(() => showError("等待表情数据..."), 4000);
+  connectWidget("sticker-mcp", coerce, render, () => cleanupCurrent());
+  setTimeout(() => showError("等待工具数据…"), 4000);
 }
-
-if (document.readyState === "loading") {
-  document.addEventListener("DOMContentLoaded", boot);
-} else {
-  boot();
-}
+if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot);
+else boot();

@@ -33,7 +33,8 @@
     "build": "npm run build:server && npm run build:widget && npm run build:assets",
     "start": "node dist/server.js",
     "start:stdio": "node dist/stdio.js",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "npm run build && node --import tsx --test src/*.test.ts"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",

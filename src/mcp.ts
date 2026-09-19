@@ -11,7 +11,6 @@ import { STICKER_VIEW_MIME, STICKER_VIEW_URI, stickerViewHtml } from "./widget/s
 
 const MAX_DOWNLOAD_BYTES = 8 * 1024 * 1024;
 const ALLOWED_MIME = ["image/png", "image/jpeg", "image/gif", "image/webp", "image/avif"];
-const WIDGET_DOMAIN = "https://sticker-mcp.asashiki.com";
 const stickerPayloadSchema = {
   id: z.string(),
   name: z.string(),
@@ -33,7 +32,7 @@ function cspMeta(config: AppConfig) {
   const origins = imageOrigins(config);
   return {
     ui: { csp: { resourceDomains: origins, connectDomains: origins } },
-    "openai/widgetDomain": WIDGET_DOMAIN,
+
     "openai/widgetCSP": { resource_domains: origins, connect_domains: origins }
   };
 }
@@ -236,13 +235,18 @@ export function createStickerServer(
       }
 
       const payload = await toPayload(config, storage, sticker, query);
+      const inline = await storage.readForInline(sticker);
+      const fallback = inline.buffer.length <= 2 * 1024 * 1024
+        ? [{ type: "image" as const, data: inline.buffer.toString("base64"), mimeType: inline.mimeType }]
+        : [];
       return {
         content: [
           {
             type: "text",
-            text: `Sent sticker '${sticker.name}' (tags: ${sticker.emotions.join(", ")}). It is now visible in the chat — no need to describe or re-send it.`
+            text: `Sticker '${sticker.name}' (tags: ${sticker.emotions.join(", ")}). Rendering is client-dependent.${payload.imageUrl.startsWith('https:') || payload.imageUrl.startsWith('http:') ? ` Image: ${payload.imageUrl}` : ''}`
           },
-          { type: "text", text: JSON.stringify(payload) }
+          ...fallback,
+          ...(payload.imageUrl.startsWith("data:") ? [] : [{ type: "text" as const, text: JSON.stringify(payload) }])
         ],
         structuredContent: payload as unknown as Record<string, unknown>,
         _meta: widgetMeta
@@ -286,7 +290,6 @@ export function createStickerServer(
           .refine((value) => value.startsWith("https://") || value.startsWith("http://"), "Must be an http(s) URL, not a data URI.")
           .describe("Public http(s) image URL only. Do not pass data:image or base64.")
       },
-      outputSchema: stickerUploadSchema,
       annotations: {
         readOnlyHint: false,
         destructiveHint: false,
@@ -295,10 +298,10 @@ export function createStickerServer(
       }
     },
     async ({ name, emotions, imageUrl }) => {
-      console.log(`[add_sticker] requested name="${name}" tags=${JSON.stringify(emotions)} imageUrl=${describeImageUrl(imageUrl)}`);
+      console.error(`[add_sticker] requested name="${name}" tags=${JSON.stringify(emotions)} imageUrl=${describeImageUrl(imageUrl)}`);
       try {
         const sticker = await addStickerFromImageUrl(storage, name, emotions, imageUrl);
-        console.log(`[add_sticker] added id=${sticker.id} name="${sticker.name}" mime=${sticker.mimeType}`);
+        console.error(`[add_sticker] added id=${sticker.id} name="${sticker.name}" mime=${sticker.mimeType}`);
         return {
           content: [
             {
@@ -333,6 +336,7 @@ export function createStickerServer(
           .max(8)
           .describe("Emotion/scene tags describing when to send it, e.g. ['点赞', '开心', '赞', 'thumbs up'].")
       },
+      outputSchema: stickerUploadSchema,
       annotations: {
         readOnlyHint: false,
         destructiveHint: false,
@@ -343,7 +347,7 @@ export function createStickerServer(
     async ({ name, emotions }) => {
       const slot = createStickerUploadSlot(name, emotions);
       const url = uploadUrl(config, slot.token);
-      console.log(`[create_sticker_upload] token=${slot.token} name="${slot.name}" tags=${JSON.stringify(slot.emotions)}`);
+      console.error(`[create_sticker_upload] name="${slot.name}" tags=${JSON.stringify(slot.emotions)}`);
       return {
         content: [
           {
